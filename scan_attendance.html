@@ -1,0 +1,719 @@
+{% extends "base.html" %}
+{% block title %}Scan Attendance — EduTrack Pro{% endblock %}
+
+{% block content %}
+<style>
+/* ── Page layout ── */
+.scan-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
+.scan-header h1 { font-size:1.4rem; font-weight:700; display:flex; align-items:center; gap:10px; }
+.scan-header p  { color:var(--muted); font-size:.85rem; margin-top:2px; }
+
+/* ── Mode tabs ── */
+.mode-tabs { display:flex; gap:0; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:3px; }
+.mode-tab  { flex:1; padding:8px 20px; border:none; border-radius:8px; background:transparent;
+             color:var(--muted); font-size:.85rem; font-weight:600; cursor:pointer;
+             transition:all .2s; display:flex; align-items:center; gap:6px; justify-content:center; }
+.mode-tab.active { background:var(--accent); color:#fff; box-shadow:0 2px 8px rgba(37,99,235,.4); }
+.mode-tab:hover:not(.active) { color:var(--text); background:var(--surface); }
+
+/* ── Panels ── */
+.scan-panel { display:none; }
+.scan-panel.active { display:block; }
+
+/* ── Camera card ── */
+.cam-wrap { position:relative; background:#050810; border-radius:12px; overflow:hidden;
+            min-height:320px; display:flex; align-items:center; justify-content:center; }
+#videoEl, #enrolVideo { width:100%; display:block; max-height:400px; object-fit:cover; }
+.cam-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+               pointer-events:none; }
+.scan-ring { width:200px; height:200px; border-radius:50%; border:2px dashed rgba(37,99,235,.5);
+             transition:border-color .3s, box-shadow .3s; }
+.scan-ring.scanning { border-color:#2563eb; border-style:solid; box-shadow:0 0 0 4px rgba(37,99,235,.2); }
+.scan-ring.ok       { border-color:var(--green); border-style:solid; box-shadow:0 0 0 8px rgba(34,197,94,.2); }
+.scan-ring.err      { border-color:var(--red);   border-style:solid; box-shadow:0 0 0 6px rgba(239,68,68,.15); }
+.cam-status-pill { position:absolute; bottom:12px; left:50%; transform:translateX(-50%);
+                   background:rgba(0,0,0,.75); backdrop-filter:blur(6px); padding:6px 16px;
+                   border-radius:20px; font-size:.8rem; white-space:nowrap; color:#fff; }
+.cam-controls { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; align-items:center; }
+.cam-controls .ms-auto { margin-left:auto; }
+
+/* ── QR reader ── */
+#qrReader { border-radius:12px; overflow:hidden; }
+#qrReader video { border-radius:12px; }
+
+/* ── Result cards ── */
+.match-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; }
+.match-card.success { border-color:rgba(34,197,94,.4); background:rgba(34,197,94,.05); }
+.match-card.warning { border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.05); }
+.match-avatar { width:52px; height:52px; min-width:52px; border-radius:50%;
+                background:linear-gradient(135deg,#2563eb,#7c3aed);
+                display:flex; align-items:center; justify-content:center;
+                font-weight:700; font-size:1.2rem; color:#fff; }
+
+/* ── Log table ── */
+.log-wrap { max-height:340px; overflow-y:auto; }
+.log-wrap::-webkit-scrollbar { width:4px; }
+.log-wrap::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+
+/* ── Enrol modal ── */
+.enrol-cam-wrap { background:#050810; border-radius:10px; overflow:hidden; min-height:240px;
+                  position:relative; display:flex; align-items:center; justify-content:center; }
+.enrol-ring { width:160px; height:160px; border-radius:50%; border:2px dashed rgba(37,99,235,.6);
+              position:absolute; pointer-events:none; }
+
+/* ── Status badge ── */
+.status-live { display:inline-flex; align-items:center; gap:5px; font-size:.75rem; font-weight:600;
+               color:var(--green); }
+.status-live::before { content:''; width:7px; height:7px; background:var(--green);
+                        border-radius:50%; animation:pulse 1.4s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.4)} }
+
+/* ── Spinner ── */
+.spin { animation:spin .8s linear infinite; display:inline-block; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* filter bar */
+.filter-bar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+.filter-bar select, .filter-bar input { background:var(--surface2); border:1px solid var(--border);
+  border-radius:8px; color:var(--text); padding:6px 10px; font-size:.82rem; }
+
+/* QR manual input */
+.manual-row { display:flex; gap:8px; margin-top:12px; }
+.manual-row input { flex:1; background:var(--surface2); border:1px solid var(--border);
+  border-radius:8px; color:var(--text); padding:8px 12px; font-size:.85rem; }
+
+/* Notification toast */
+#toastBox { position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:8px; }
+.toast-item { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+              padding:12px 16px; min-width:260px; font-size:.83rem; display:flex; gap:10px;
+              align-items:flex-start; box-shadow:0 4px 20px rgba(0,0,0,.4);
+              animation:slideIn .25s ease; }
+.toast-item.success { border-color:rgba(34,197,94,.4); }
+.toast-item.error   { border-color:rgba(239,68,68,.4); }
+@keyframes slideIn { from{transform:translateX(40px);opacity:0} to{transform:translateX(0);opacity:1} }
+</style>
+
+<!-- Page header -->
+<div class="scan-header">
+  <div>
+    <h1><i class="fa-solid fa-qrcode" style="color:var(--accent)"></i> Attendance Scanner</h1>
+    <p>Mark attendance via QR code or face recognition — combined in one place</p>
+  </div>
+  <div class="mode-tabs" id="modeTabs">
+    <button class="mode-tab active" data-mode="face" onclick="switchMode('face')">
+      <i class="fa-solid fa-face-viewfinder"></i> Face Scan
+    </button>
+    <button class="mode-tab" data-mode="qr" onclick="switchMode('qr')">
+      <i class="fa-solid fa-qrcode"></i> QR Code
+    </button>
+  </div>
+</div>
+
+<!-- Filter bar (shared) -->
+<div class="filter-bar">
+  <select id="fDept">
+    <option value="">All Departments</option>
+    {% for d in depts %}<option value="{{ d.code }}">{{ d.code }} — {{ d.name }}</option>{% endfor %}
+  </select>
+  <select id="fSem">
+    <option value="">All Semesters</option>
+    {% for i in range(1,9) %}<option value="{{ i }}">Sem {{ i }}</option>{% endfor %}
+  </select>
+  <select id="fSec">
+    <option value="">All Sections</option>
+    {% for s in ["A","B","C","D"] %}<option value="{{ s }}">Section {{ s }}</option>{% endfor %}
+  </select>
+  <select id="fSubject">
+    {% if role != 'teacher' %}<option value="">Overall</option>{% endif %}
+    {% for s in subjects %}<option value="{{ s.id }}">{{ s.code }} — {{ s.name }}</option>{% endfor %}
+  </select>
+  <select id="fPeriod">
+    {% for i in range(1,9) %}<option value="{{ i }}">Period {{ i }}</option>{% endfor %}
+  </select>
+</div>
+
+<div class="row g-4">
+  <!-- Left: camera / QR column -->
+  <div class="col-lg-7">
+
+    <!-- FACE panel -->
+    <div class="scan-panel active" id="panelFace">
+      <div class="card">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <span><i class="fa-solid fa-camera me-2" style="color:var(--accent)"></i>Live Camera</span>
+          <div class="d-flex gap-2 align-items-center">
+            <span class="status-live" id="liveStatus" style="display:none!important;"></span>
+            <span class="badge" id="scanModeLabel" style="background:var(--accent)">Auto</span>
+            <button class="btn btn-sm btn-ghost" id="btnToggleAuto">Pause</button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="cam-wrap">
+            <video id="videoEl" autoplay playsinline muted></video>
+            <canvas id="snapCanvas" style="display:none;"></canvas>
+            <div class="cam-overlay"><div class="scan-ring" id="scanRing"></div></div>
+            <div class="cam-status-pill" id="camStatus">
+              <span class="spin">⟳</span> Starting camera…
+            </div>
+          </div>
+        </div>
+        <div class="card-footer">
+          <div class="cam-controls">
+            <button class="btn btn-primary btn-sm" id="btnStartCam" style="display:none;">
+              <i class="fa-solid fa-video me-1"></i>Start Camera
+            </button>
+            <button class="btn btn-ghost btn-sm" id="btnStopCam">
+              <i class="fa-solid fa-video-slash me-1"></i>Stop
+            </button>
+            <button class="btn btn-sm" style="background:var(--green);color:#fff;" id="btnManualSnap">
+              <i class="fa-solid fa-face-smile me-1"></i>Scan Now
+            </button>
+            <span class="ms-auto" style="font-size:.78rem;color:var(--muted);">
+              <i class="fa-solid fa-clock me-1"></i>Auto every <b>3s</b>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- QR panel -->
+    <div class="scan-panel" id="panelQr">
+      <div class="card">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <span><i class="fa-solid fa-qrcode me-2" style="color:var(--accent)"></i>QR Scanner</span>
+          <span class="badge" style="background:var(--surface2);color:var(--muted);">Hold QR to camera</span>
+        </div>
+        <div class="card-body">
+          <div id="qrReader"></div>
+          <div class="manual-row">
+            <input id="manualUsn" placeholder="Or enter USN manually…" autocomplete="off"
+                   onkeydown="if(event.key==='Enter')markByUSN()">
+            <button class="btn btn-primary btn-sm" onclick="markByUSN()">
+              <i class="fa-solid fa-check me-1"></i>Mark Present
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right: result + log column -->
+  <div class="col-lg-5 d-flex flex-column gap-3">
+
+    <!-- Last result -->
+    <div id="resultCard" class="match-card" style="display:none;">
+      <div class="d-flex align-items-center gap-3">
+        <div class="match-avatar" id="resAvatar">?</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:1rem;" id="resName">—</div>
+          <div style="font-size:.8rem;color:var(--muted);" id="resUsn">—</div>
+          <div style="font-size:.78rem;color:var(--muted);" id="resDept">—</div>
+        </div>
+        <div>
+          <span class="badge" id="resBadge" style="background:var(--green);font-size:.8rem;padding:6px 12px;">
+            Present ✓
+          </span>
+          <div style="font-size:.72rem;color:var(--muted);text-align:right;margin-top:3px;" id="resMethod">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error card -->
+    <div id="errorCard" class="match-card warning" style="display:none;">
+      <div class="d-flex align-items-center gap-3">
+        <i class="fa-solid fa-circle-exclamation" style="color:var(--yellow);font-size:1.5rem;"></i>
+        <div>
+          <div style="font-weight:600;color:var(--yellow);" id="errorMsg">—</div>
+          <div style="font-size:.78rem;color:var(--muted);margin-top:2px;">Check enrollment or try again</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="card flex-grow-1">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="fa-solid fa-list-check me-2" style="color:var(--green)"></i>Marked Today</span>
+        <span class="badge" id="logCount" style="background:var(--green);border-radius:20px;">0</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="log-wrap">
+          <table style="width:100%;border-collapse:collapse;font-size:.82rem;" id="logTable">
+            <thead>
+              <tr style="background:var(--surface2);position:sticky;top:0;z-index:1;">
+                <th style="padding:8px 12px;text-align:left;color:var(--muted);font-weight:600;">Name</th>
+                <th style="padding:8px 6px;color:var(--muted);font-weight:600;">USN</th>
+                <th style="padding:8px 6px;color:var(--muted);font-weight:600;">Via</th>
+                <th style="padding:8px 12px;text-align:right;color:var(--muted);font-weight:600;">Time</th>
+              </tr>
+            </thead>
+            <tbody id="logBody">
+              <tr id="logEmpty">
+                <td colspan="4" style="text-align:center;padding:32px;color:var(--muted);">
+                  <i class="fa-solid fa-clock-rotate-left d-block mb-2" style="font-size:1.6rem;"></i>
+                  No attendance marked yet
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Enrol status quick panel -->
+    <div class="card">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="fa-solid fa-users me-2" style="color:var(--purple)"></i>Face Enrollments</span>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-ghost" onclick="loadEnrolTable()">
+            <i class="fa-solid fa-rotate-right"></i>
+          </button>
+          <a href="/attendance/face-enroll" class="btn btn-sm btn-ghost">
+            <i class="fa-solid fa-user-plus me-1"></i>Manage
+          </a>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div style="max-height:220px;overflow-y:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:.8rem;" id="enrolTable">
+            <tbody id="enrolBody">
+              <tr><td colspan="4" style="text-align:center;padding:16px;color:var(--muted);">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Enrol modal (inline, reachable from the enrolment table) -->
+<div id="enrolModal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.6);
+     backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;
+              width:min(480px,95vw);padding:24px;position:relative;">
+    <button onclick="closeEnrolModal()" style="position:absolute;top:14px;right:14px;background:var(--surface2);
+            border:1px solid var(--border);border-radius:6px;padding:4px 10px;color:var(--muted);cursor:pointer;">✕</button>
+    <h3 style="font-size:1rem;font-weight:700;margin-bottom:4px;">
+      <i class="fa-solid fa-face-viewfinder me-2" style="color:var(--accent)"></i>Enrol Face
+    </h3>
+    <p style="font-size:.8rem;color:var(--muted);margin-bottom:14px;">
+      Enrolling: <strong id="enrolStudentName">—</strong> (<span id="enrolStudentUsn">—</span>)
+    </p>
+    <div class="enrol-cam-wrap">
+      <video id="enrolVideo" autoplay playsinline muted style="width:100%;display:block;"></video>
+      <div class="enrol-ring"></div>
+    </div>
+    <div id="enrolMsg" style="display:none;margin:10px 0;padding:10px 14px;border-radius:8px;font-size:.82rem;"></div>
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      <button id="btnCaptureFace" class="btn btn-primary" style="flex:1;">
+        <i class="fa-solid fa-camera me-1"></i>Capture & Enrol
+      </button>
+      <button onclick="closeEnrolModal()" class="btn btn-ghost">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toastBox"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script>
+/* ══════════════════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════════════════ */
+let faceStream   = null;
+let autoInterval = null;
+let autoRunning  = true;
+let scanning     = false;       // prevent concurrent scan calls
+let markedSet    = new Set();
+let markedList   = [];
+
+let enrolStream = null;
+let enrolSid    = null;
+
+let qrScanner   = null;
+let qrActive    = false;
+
+let currentMode = 'face';
+
+/* ══════════════════════════════════════════════════════════
+   MODE SWITCHING  — clean teardown / setup
+══════════════════════════════════════════════════════════ */
+function switchMode(mode) {
+  if (mode === currentMode) return;
+  currentMode = mode;
+
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+  document.querySelectorAll('.scan-panel').forEach(p => p.classList.remove('active'));
+
+  if (mode === 'face') {
+    document.getElementById('panelFace').classList.add('active');
+    stopQr();
+    startFaceCamera();
+  } else {
+    document.getElementById('panelQr').classList.add('active');
+    stopFaceCamera();
+    startQr();
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   FACE CAMERA
+══════════════════════════════════════════════════════════ */
+const videoEl    = document.getElementById('videoEl');
+const snapCanvas = document.getElementById('snapCanvas');
+
+async function startFaceCamera() {
+  try {
+    faceStream = await navigator.mediaDevices.getUserMedia({ video:{ width:640, height:480, facingMode:'user' }, audio:false });
+    videoEl.srcObject = faceStream;
+    setFaceStatus('info', '🎥 Camera ready — scanning…');
+    document.getElementById('btnStartCam').style.display = 'none';
+    document.getElementById('btnStopCam').style.display  = '';
+    document.getElementById('liveStatus').style.display  = '';
+    if (autoRunning) startAutoScan();
+  } catch(e) {
+    setFaceStatus('error', '⚠ Camera denied: ' + e.message);
+    document.getElementById('btnStartCam').style.display = '';
+    document.getElementById('btnStopCam').style.display  = 'none';
+  }
+}
+
+function stopFaceCamera() {
+  stopAutoScan();
+  if (faceStream) { faceStream.getTracks().forEach(t => t.stop()); faceStream = null; }
+  videoEl.srcObject = null;
+  document.getElementById('liveStatus').style.display = 'none';
+  setFaceStatus('secondary', 'Camera stopped.');
+}
+
+function captureFrame() {
+  if (!faceStream || !videoEl.videoWidth) return null;
+  snapCanvas.width  = videoEl.videoWidth;
+  snapCanvas.height = videoEl.videoHeight;
+  snapCanvas.getContext('2d').drawImage(videoEl, 0, 0);
+  return snapCanvas.toDataURL('image/jpeg', 0.85);
+}
+
+function setFaceStatus(type, html) {
+  const el = document.getElementById('camStatus');
+  el.style.color = type === 'error' ? 'var(--red)' : type === 'info' ? '#fff' : 'var(--muted)';
+  el.innerHTML = html;
+}
+
+/* ══════════════════════════════════════════════════════════
+   AUTO SCAN
+══════════════════════════════════════════════════════════ */
+function startAutoScan() {
+  if (autoInterval) clearInterval(autoInterval);
+  autoInterval = setInterval(doFaceScan, 3000);
+  document.getElementById('btnToggleAuto').textContent = 'Pause';
+  document.getElementById('scanModeLabel').textContent = 'Auto';
+}
+
+function stopAutoScan() {
+  clearInterval(autoInterval);
+  autoInterval = null;
+}
+
+document.getElementById('btnToggleAuto').addEventListener('click', function() {
+  autoRunning = !autoRunning;
+  if (autoRunning) { startAutoScan(); this.textContent = 'Pause'; }
+  else { stopAutoScan(); this.textContent = 'Resume'; document.getElementById('scanModeLabel').textContent = 'Manual'; }
+});
+document.getElementById('btnManualSnap').addEventListener('click', doFaceScan);
+document.getElementById('btnStartCam').addEventListener('click', startFaceCamera);
+document.getElementById('btnStopCam').addEventListener('click', () => {
+  stopFaceCamera();
+  document.getElementById('btnStartCam').style.display = '';
+  document.getElementById('btnStopCam').style.display  = 'none';
+});
+
+/* ══════════════════════════════════════════════════════════
+   FACE SCAN API
+══════════════════════════════════════════════════════════ */
+async function doFaceScan() {
+  if (scanning) return;                   // ← prevent overlap
+  const img = captureFrame();
+  if (!img) return;
+
+  scanning = true;
+  const ring = document.getElementById('scanRing');
+  ring.className = 'scan-ring scanning';
+  setFaceStatus('info', '<span class="spin">⟳</span> Recognising…');
+
+  try {
+    const res  = await fetch('/api/face-recognize', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image:           img,
+        subject_id:      document.getElementById('fSubject').value || null,
+        period_no:       document.getElementById('fPeriod').value  || 1,
+        mark_attendance: true,
+      }),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      ring.className = 'scan-ring ok';
+      setFaceStatus('info', '✅ Present: <b>' + data.name + '</b>');
+      showResult(data, 'face');
+      addToLog(data, 'Face');
+      toast('✅ ' + data.name + ' marked Present', 'success');
+      setTimeout(() => { ring.className = 'scan-ring'; setFaceStatus('info', '🎥 Scanning…'); }, 2500);
+    } else {
+      ring.className = 'scan-ring err';
+      showError(data.error || 'Face not recognised.');
+      setFaceStatus('error', '✗ ' + (data.error || 'Not recognised'));
+      setTimeout(() => { ring.className = 'scan-ring'; setFaceStatus('info', '🎥 Scanning…'); }, 1800);
+    }
+  } catch(e) {
+    ring.className = 'scan-ring';
+    setFaceStatus('error', '⚠ Network error: ' + e.message);
+  } finally {
+    scanning = false;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   QR SCANNER
+══════════════════════════════════════════════════════════ */
+function startQr() {
+  if (qrActive) return;
+  qrActive = true;
+  qrScanner = new Html5QrcodeScanner('qrReader', { fps: 10, qrbox: 230, rememberLastUsedCamera: true });
+  qrScanner.render(async (text) => {
+    // Pause scanner briefly to avoid double-triggers
+    qrScanner.pause(true);
+    await markByQrText(text);
+    setTimeout(() => { try { qrScanner.resume(); } catch(_){} }, 2500);
+  }, (err) => { /* ignore scan-not-found errors */ });
+}
+
+function stopQr() {
+  if (!qrActive || !qrScanner) return;
+  qrActive = false;
+  try { qrScanner.clear(); } catch(_) {}
+  qrScanner = null;
+  document.getElementById('qrReader').innerHTML = '';
+}
+
+async function markByQrText(text) {
+  // QR may contain USN or a JSON payload {usn:"...", id:...}
+  let lookup = text.trim();
+  try { const j = JSON.parse(text); lookup = j.usn || j.id || text; } catch(_) {}
+
+  try {
+    const r = await fetch('/api/student/' + encodeURIComponent(lookup));
+    if (!r.ok) { showError('Student not found: ' + lookup); toast('Student not found: ' + lookup, 'error'); return; }
+    const s = await r.json();
+    const d = await apiPost('/attendance/mark', {
+      student_id: s.id, status: 'Present',
+      subject_id: document.getElementById('fSubject').value || null,
+      period_no:  document.getElementById('fPeriod').value  || 1,
+    });
+    if (d && d.success) {
+      showResult(s, 'qr');
+      addToLog(s, 'QR');
+      toast('✅ ' + s.name + ' marked Present', 'success');
+    } else {
+      showError('Could not mark attendance.');
+    }
+  } catch(e) {
+    showError('Network error: ' + e.message);
+  }
+}
+
+async function markByUSN() {
+  const usn = document.getElementById('manualUsn').value.trim();
+  if (!usn) return;
+  document.getElementById('manualUsn').value = '';
+  await markByQrText(usn);
+}
+
+/* ══════════════════════════════════════════════════════════
+   RESULT / ERROR DISPLAY
+══════════════════════════════════════════════════════════ */
+function showResult(d, via) {
+  document.getElementById('resultCard').style.display = '';
+  document.getElementById('errorCard').style.display  = 'none';
+  document.getElementById('resultCard').className = 'match-card success';
+  document.getElementById('resName').textContent = d.name;
+  document.getElementById('resUsn').textContent  = d.usn  || d.username || '—';
+  document.getElementById('resDept').textContent = (d.department||'') + (d.semester ? ' · Sem '+d.semester : '') + (d.section ? ' · '+d.section : '');
+  document.getElementById('resMethod').textContent = via === 'face' ? '📷 Face Recognition' : '📱 QR Code';
+  const initials = (d.name||'?').trim().split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('resAvatar').textContent = initials;
+}
+
+function showError(msg) {
+  document.getElementById('resultCard').style.display = 'none';
+  document.getElementById('errorCard').style.display  = '';
+  document.getElementById('errorMsg').textContent = msg;
+}
+
+/* ══════════════════════════════════════════════════════════
+   LOG TABLE
+══════════════════════════════════════════════════════════ */
+function addToLog(d, via) {
+  if (markedSet.has(d.id || d.student_id)) return;   // deduplicate per session
+  markedSet.add(d.id || d.student_id);
+  markedList.unshift({ name: d.name, usn: d.usn || d.username || '—', via, time: new Date().toLocaleTimeString() });
+  renderLog();
+}
+
+function renderLog() {
+  const tbody = document.getElementById('logBody');
+  document.getElementById('logCount').textContent = markedList.length;
+  document.getElementById('logEmpty') && (document.getElementById('logEmpty').style.display = markedList.length ? 'none' : '');
+  if (!markedList.length) {
+    tbody.innerHTML = `<tr id="logEmpty"><td colspan="4" style="text-align:center;padding:32px;color:var(--muted);">
+      <i class="fa-solid fa-clock-rotate-left d-block mb-2" style="font-size:1.6rem;"></i>No attendance marked yet</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = markedList.map(r => `
+    <tr style="border-top:1px solid var(--border);">
+      <td style="padding:8px 12px;font-weight:600;">${r.name}</td>
+      <td style="padding:8px 6px;"><span style="background:var(--surface2);padding:2px 8px;border-radius:4px;font-size:.75rem;">${r.usn}</span></td>
+      <td style="padding:8px 6px;font-size:.75rem;color:var(--muted);">${r.via === 'Face' ? '📷' : '📱'} ${r.via}</td>
+      <td style="padding:8px 12px;text-align:right;color:var(--muted);font-size:.76rem;">${r.time}</td>
+    </tr>`).join('');
+}
+
+/* ══════════════════════════════════════════════════════════
+   ENROLMENT TABLE
+══════════════════════════════════════════════════════════ */
+let enrolStudents = [];
+
+async function loadEnrolTable() {
+  const dept = document.getElementById('fDept').value;
+  const sem  = document.getElementById('fSem').value;
+  const sec  = document.getElementById('fSec').value;
+  const q    = new URLSearchParams({ dept, sem, sec });
+  try {
+    const res  = await fetch('/api/face-enrollment-status?' + q);
+    const data = await res.json();
+    enrolStudents = data.students || [];
+    renderEnrolTable(enrolStudents);
+  } catch(e) {
+    document.getElementById('enrolBody').innerHTML =
+      `<tr><td colspan="4" style="text-align:center;padding:14px;color:var(--red);">Failed to load</td></tr>`;
+  }
+}
+
+function renderEnrolTable(students) {
+  const tbody = document.getElementById('enrolBody');
+  if (!students.length) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:14px;color:var(--muted);">No students</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = students.map(s => `
+    <tr style="border-top:1px solid var(--border);">
+      <td style="padding:6px 12px;font-weight:600;font-size:.8rem;">${s.name}</td>
+      <td style="padding:6px 6px;font-size:.76rem;color:var(--muted);">${s.usn}</td>
+      <td style="padding:6px 6px;">
+        ${s.face_enrolled
+          ? `<span style="background:rgba(34,197,94,.15);color:var(--green);padding:2px 8px;border-radius:4px;font-size:.73rem;">✓ Enrolled</span>`
+          : `<span style="background:rgba(245,158,11,.15);color:var(--yellow);padding:2px 8px;border-radius:4px;font-size:.73rem;">Not enrolled</span>`}
+      </td>
+      <td style="padding:6px 12px;text-align:right;">
+        <button onclick="openEnrolModal(${s.id},'${s.name.replace(/'/g,"\\'")}','${s.usn}')"
+                style="background:var(--accent);color:#fff;border:none;border-radius:5px;
+                       padding:3px 10px;font-size:.73rem;cursor:pointer;">
+          ${s.face_enrolled ? 'Re-enrol' : 'Enrol'}
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+/* ══════════════════════════════════════════════════════════
+   ENROL MODAL
+══════════════════════════════════════════════════════════ */
+const enrolModalEl = document.getElementById('enrolModal');
+const enrolVideoEl = document.getElementById('enrolVideo');
+
+async function openEnrolModal(sid, name, usn) {
+  enrolSid = parseInt(sid);
+  document.getElementById('enrolStudentName').textContent = name;
+  document.getElementById('enrolStudentUsn').textContent  = usn;
+  hideEnrolMsg();
+  enrolModalEl.style.display = 'flex';
+  try {
+    enrolStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user' }, audio:false });
+    enrolVideoEl.srcObject = enrolStream;
+  } catch(e) { showEnrolMsg('error', 'Camera error: ' + e.message); }
+}
+
+function closeEnrolModal() {
+  enrolModalEl.style.display = 'none';
+  if (enrolStream) { enrolStream.getTracks().forEach(t => t.stop()); enrolStream = null; }
+  enrolSid = null;
+}
+
+document.getElementById('btnCaptureFace').addEventListener('click', async () => {
+  if (!enrolStream || !enrolSid) { showEnrolMsg('error', 'No camera or student selected.'); return; }
+  const canvas = document.createElement('canvas');
+  canvas.width  = enrolVideoEl.videoWidth  || 640;
+  canvas.height = enrolVideoEl.videoHeight || 480;
+  canvas.getContext('2d').drawImage(enrolVideoEl, 0, 0);
+  const b64 = canvas.toDataURL('image/jpeg', 0.9);
+
+  showEnrolMsg('info', '<span class="spin">⟳</span> Processing…');
+  document.getElementById('btnCaptureFace').disabled = true;
+
+  try {
+    const res  = await fetch(`/students/${enrolSid}/enroll-face`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ image: b64 }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showEnrolMsg('success', '✅ ' + data.message);
+      toast('✅ ' + data.message, 'success');
+      setTimeout(() => { closeEnrolModal(); loadEnrolTable(); }, 1200);
+    } else {
+      showEnrolMsg('error', data.error || 'Enrollment failed.');
+    }
+  } catch(e) {
+    showEnrolMsg('error', 'Network error: ' + e.message);
+  } finally {
+    document.getElementById('btnCaptureFace').disabled = false;
+  }
+});
+
+function showEnrolMsg(type, html) {
+  const el = document.getElementById('enrolMsg');
+  el.style.display = '';
+  el.style.background = type === 'success' ? 'rgba(34,197,94,.1)' : type === 'error' ? 'rgba(239,68,68,.1)' : 'rgba(37,99,235,.1)';
+  el.style.color = type === 'success' ? 'var(--green)' : type === 'error' ? 'var(--red)' : 'var(--accent2)';
+  el.innerHTML = html;
+}
+function hideEnrolMsg() { document.getElementById('enrolMsg').style.display = 'none'; }
+
+/* ══════════════════════════════════════════════════════════
+   TOAST
+══════════════════════════════════════════════════════════ */
+function toast(msg, type = 'info') {
+  const box = document.getElementById('toastBox');
+  const el  = document.createElement('div');
+  el.className = 'toast-item ' + type;
+  el.innerHTML = `<span style="font-size:1rem;">${type==='success'?'✅':'⚠'}</span><span>${msg}</span>`;
+  box.appendChild(el);
+  setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 3000);
+}
+
+/* ══════════════════════════════════════════════════════════
+   FILTER CHANGE → reload enrol table
+══════════════════════════════════════════════════════════ */
+['fDept','fSem','fSec'].forEach(id =>
+  document.getElementById(id).addEventListener('change', loadEnrolTable));
+
+/* ══════════════════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════════════════ */
+startFaceCamera();
+loadEnrolTable();
+</script>
+{% endblock %}

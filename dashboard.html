@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — EduTrack Pro{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_sub %}{{ today if today else '' }} · Real-time overview{% endblock %}
+
+{% block topbar_actions %}
+<select id="deptFilter" class="btn btn-ghost" style="padding:7px 12px;font-size:13px;" onchange="window.location='/dashboard?dept='+this.value">
+  <option value="">All Departments</option>
+  {% for d in depts %}<option value="{{ d.code }}" {% if dept_filter==d.code %}selected{% endif %}>{{ d.code }}</option>{% endfor %}
+</select>
+{% endblock %}
+
+{% block content %}
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon si-blue"><i class="fa fa-users"></i></div>
+    <div><div class="stat-val">{{ stats.total }}</div><div class="stat-label">Total Students</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon si-green"><i class="fa fa-circle-check"></i></div>
+    <div><div class="stat-val" id="s-present">{{ stats.present }}</div><div class="stat-label">Present Today</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon si-red"><i class="fa fa-circle-xmark"></i></div>
+    <div><div class="stat-val" id="s-absent">{{ stats.absent }}</div><div class="stat-label">Absent Today</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon si-yellow"><i class="fa fa-percent"></i></div>
+    <div><div class="stat-val" id="s-pct">{{ stats.percentage }}%</div><div class="stat-label">Attendance Rate</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon si-purple"><i class="fa fa-file-pen"></i></div>
+    <div><div class="stat-val">{{ stats.exam_count }}</div><div class="stat-label">Total Exams</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon si-red"><i class="fa fa-indian-rupee-sign"></i></div>
+    <div><div class="stat-val">{{ stats.pending_fees }}</div><div class="stat-label">Pending Fee Records</div></div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <!-- Weekly Chart -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Weekly Attendance</span></div>
+    <div class="card-body"><canvas id="weekChart" height="160"></canvas></div>
+  </div>
+
+  <!-- Dept/Sem Breakdown -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Dept / Semester Breakdown</span></div>
+    <div class="card-body" style="max-height:240px;overflow-y:auto;">
+      <table>
+        <thead><tr><th>Dept</th><th>Sem</th><th>Sec</th><th>Total</th><th>Present</th><th>Rate</th></tr></thead>
+        <tbody>
+          {% for cs in stats.class_stats %}
+          <tr>
+            <td>{{ cs.department }}</td>
+            <td><span class="badge badge-blue">Sem {{ cs.semester }}</span></td>
+            <td>{{ cs.section }}</td>
+            <td>{{ cs.total }}</td>
+            <td>{{ cs.present }}</td>
+            <td>
+              {% set pct = (cs.present/cs.total*100)|round(1) if cs.total else 0 %}
+              <span class="badge {% if pct>=75 %}badge-green{% elif pct>=50 %}badge-yellow{% else %}badge-red{% endif %}">{{ pct }}%</span>
+            </td>
+          </tr>
+          {% else %}<tr><td colspan="6" style="text-align:center;color:var(--muted);">No students yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="card" style="margin-top:20px;">
+  <div class="card-header">
+    <span class="card-title">Recent Activity</span>
+    <a href="/attendance" class="btn btn-ghost btn-sm">View All</a>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <table>
+      <thead><tr><th>Student</th><th>USN</th><th>Dept</th><th>Sem</th><th>Status</th><th>Time</th><th>By</th></tr></thead>
+      <tbody>
+        {% for a in stats.recent %}
+        <tr>
+          <td><strong>{{ a.name }}</strong></td>
+          <td class="mono" style="font-size:12px;">{{ a.usn }}</td>
+          <td>{{ a.department }}</td>
+          <td>{{ a.semester }}</td>
+          <td><span class="badge {% if a.status=='Present' %}badge-green{% else %}badge-red{% endif %}">{{ a.status }}</span></td>
+          <td style="color:var(--muted);font-size:12px;">{{ a.time }}</td>
+          <td style="color:var(--muted);font-size:12px;">{{ a.marked_by }}</td>
+        </tr>
+        {% else %}<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">No activity yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+const weekly = {{ stats.weekly | tojson }};
+const labels = weekly.map(w => w.date);
+const data   = weekly.map(w => w.cnt);
+new Chart(document.getElementById('weekChart'), {
+  type:'bar',
+  data:{ labels, datasets:[{ label:'Present', data, backgroundColor:'rgba(37,99,235,.6)',
+          borderColor:'#2563eb', borderWidth:1, borderRadius:6 }] },
+  options:{ responsive:true, plugins:{legend:{display:false}},
+            scales:{ x:{ticks:{color:'#7d8590'},grid:{color:'#21262d'}},
+                     y:{ticks:{color:'#7d8590'},grid:{color:'#21262d'}} } }
+});
+
+// Auto-refresh stats
+setInterval(async () => {
+  const dept = document.getElementById('deptFilter').value;
+  const r = await fetch('/api/stats?dept='+dept);
+  const d = await r.json();
+  document.getElementById('s-present').textContent = d.present;
+  document.getElementById('s-absent').textContent  = d.absent;
+  document.getElementById('s-pct').textContent     = d.percentage+'%';
+}, 15000);
+</script>
+{% endblock %}

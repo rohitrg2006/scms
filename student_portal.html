@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}My Portal — EduTrack Pro{% endblock %}
+{% block page_title %}My Portal{% endblock %}
+{% block page_sub %}{{ student.name }} · {{ student.usn }} · {{ student.department }}{% endblock %}
+
+{% block topbar_actions %}
+<select onchange="window.location='/portal?sem='+this.value" class="btn btn-ghost" style="padding:7px 12px;font-size:13px;">
+  {% for s in range(1,9) %}<option value="{{ s }}" {% if sem_filter==s %}selected{% endif %}>Sem {{ s }}</option>{% endfor %}
+</select>
+{% endblock %}
+
+{% block content %}
+<!-- Overview Cards -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon {% if report.percentage>=75 %}si-green{% elif report.percentage>=65 %}si-yellow{% else %}si-red{% endif %}"><i class="fa fa-clipboard-check"></i></div>
+    <div>
+      <div class="stat-val">{{ report.percentage or 0 }}%</div>
+      <div class="stat-label">Overall Attendance</div>
+      <div class="stat-sub">{{ report.attended or 0 }} / {{ report.total_classes or 0 }} classes</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon si-purple"><i class="fa fa-file-pen"></i></div>
+    <div><div class="stat-val">{{ marks|length }}</div><div class="stat-label">Exam Results</div></div>
+  </div>
+  {% set total_bal = fees|sum(attribute='balance') %}
+  <div class="stat-card">
+    <div class="stat-icon {% if total_bal>0 %}si-red{% else %}si-green{% endif %}"><i class="fa fa-indian-rupee-sign"></i></div>
+    <div>
+      <div class="stat-val">₹{{ "{:,.0f}".format(total_bal) }}</div>
+      <div class="stat-label">Fee Balance</div>
+      {% if total_bal<=0 %}<div class="stat-sub" style="color:var(--green);">✅ All cleared</div>{% endif %}
+    </div>
+  </div>
+</div>
+
+{% if report.percentage and report.percentage < 75 %}
+<div class="alert alert-error">
+  <i class="fa fa-triangle-exclamation"></i>
+  Your attendance is <strong>{{ report.percentage }}%</strong> — below the 75% minimum. Please attend classes regularly.
+</div>
+{% endif %}
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('att',this)">📋 Attendance</button>
+  <button class="tab"        onclick="switchTab('marks',this)">📝 Marks</button>
+  <button class="tab"        onclick="switchTab('tt',this)">📅 Timetable</button>
+  <button class="tab"        onclick="switchTab('fees',this)">💰 Fees</button>
+  <button class="tab"        onclick="switchTab('ann',this)">📢 Notices</button>
+  <button class="tab"        onclick="switchTab('settings',this)">⚙️ Settings</button>
+</div>
+
+<!-- ATTENDANCE TAB -->
+<div id="tab-att">
+  <div class="card">
+    <div class="card-header"><span class="card-title">Subject-wise Attendance — Sem {{ sem_filter }}</span></div>
+    <div class="card-body" style="padding:0;">
+      <table>
+        <thead><tr><th>Subject</th><th>Code</th><th>Total</th><th>Attended</th><th>Attendance %</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for sub in subj_att %}
+          <tr>
+            <td><strong>{{ sub.name }}</strong></td>
+            <td class="mono" style="font-size:12px;">{{ sub.code }}</td>
+            <td>{{ sub.total_classes }}</td>
+            <td>{{ sub.attended }}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="progress-bar" style="width:100px;">
+                  <div class="progress-fill {% if sub.percentage>=75 %}pf-green{% elif sub.percentage>=65 %}pf-yellow{% else %}pf-red{% endif %}"
+                       style="width:{{ sub.percentage }}%"></div>
+                </div>
+                <strong>{{ sub.percentage }}%</strong>
+              </div>
+            </td>
+            <td>
+              {% if sub.shortage %}<span class="badge badge-red">⚠️ Shortage</span>
+              {% elif sub.total_classes==0 %}<span class="badge badge-gray">No Records</span>
+              {% else %}<span class="badge badge-green">✅ OK</span>{% endif %}
+            </td>
+          </tr>
+          {% else %}<tr><td colspan="6" style="text-align:center;color:var(--muted);">No records yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- MARKS TAB -->
+<div id="tab-marks" style="display:none;">
+  <div class="card">
+    <div class="card-header"><span class="card-title">My Marks — Sem {{ sem_filter }}</span></div>
+    <div class="card-body" style="padding:0;">
+      <table>
+        <thead><tr><th>Subject</th><th>Exam</th><th>Type</th><th>Marks</th><th>Max</th><th>%</th><th>Grade</th></tr></thead>
+        <tbody>
+          {% for m in marks %}
+          <tr>
+            <td><strong>{{ m.subject_name }}</strong></td>
+            <td>{{ m.title }}</td>
+            <td><span class="badge badge-blue">{{ m.exam_type|title }}</span></td>
+            <td><strong>{{ m.marks }}</strong></td>
+            <td style="color:var(--muted);">{{ m.max_marks }}</td>
+            <td>
+              {% set pct = (m.marks/m.max_marks*100)|round(1) if m.max_marks else 0 %}
+              <span class="badge {% if pct>=75 %}badge-green{% elif pct>=50 %}badge-yellow{% else %}badge-red{% endif %}">{{ pct }}%</span>
+            </td>
+            <td><span class="badge badge-purple">{{ m.grade or '—' }}</span></td>
+          </tr>
+          {% else %}<tr><td colspan="7" style="text-align:center;color:var(--muted);">No marks available</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TIMETABLE TAB -->
+<div id="tab-tt" style="display:none;">
+  <div class="card">
+    <div class="card-header"><span class="card-title">Timetable — {{ student.department }} Sem {{ sem_filter }} {{ student.section }}</span></div>
+    <div class="table-wrap card-body" style="padding:0;overflow-x:auto;">
+      <table>
+        <thead>
+          <tr><th>Period</th>{% for d in days %}<th style="{% if d==today_day %}color:var(--accent2);{% endif %}">{{ d[:3] }}{% if d==today_day %} ◀{% endif %}</th>{% endfor %}</tr>
+        </thead>
+        <tbody>
+          {% for p in periods %}
+          <tr>
+            <td style="color:var(--muted);font-weight:700;">P{{ p }}</td>
+            {% for d in days %}
+            {% set entry = grid[d][p] %}
+            <td style="{% if d==today_day %}background:rgba(37,99,235,.05);{% endif %}">
+              {% if entry %}
+              <div style="font-size:12px;font-weight:700;color:var(--text);">{{ entry.subject }}</div>
+              <div style="font-size:11px;color:var(--muted);">{{ entry.faculty }}</div>
+              <div style="font-size:10px;color:var(--muted);">{{ entry.time_start }}–{{ entry.time_end }}</div>
+              {% else %}<span style="color:var(--border);">—</span>{% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- FEES TAB -->
+<div id="tab-fees" style="display:none;">
+  <div class="card">
+    <div class="card-header"><span class="card-title">My Fee Status</span></div>
+    <div class="card-body" style="padding:0;">
+      <table>
+        <thead><tr><th>Fee</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Due</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for f in fees %}
+          <tr>
+            <td>{{ f.label }}</td>
+            <td>₹{{ "{:,.0f}".format(f.amount) }}</td>
+            <td>₹{{ "{:,.0f}".format(f.amount_paid) }}</td>
+            <td><span class="badge {% if f.balance<=0 %}badge-green{% elif f.balance<f.amount %}badge-yellow{% else %}badge-red{% endif %}">₹{{ "{:,.0f}".format(f.balance) }}</span></td>
+            <td style="font-size:12px;color:var(--muted);">{{ f.due_date }}</td>
+            <td><span class="badge {% if f.status=='paid' %}badge-green{% elif f.status=='partial' %}badge-yellow{% else %}badge-red{% endif %}">{{ f.status|title }}</span></td>
+          </tr>
+          {% else %}<tr><td colspan="6" style="text-align:center;color:var(--muted);">No fee records</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ANNOUNCEMENTS TAB -->
+<div id="tab-ann" style="display:none;">
+  {% for a in announcements %}
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-body">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+        <strong>{% if a.pinned %}📌 {% endif %}{{ a.title }}</strong>
+        <span style="font-size:11px;color:var(--muted);">{{ a.created_at[:10] }}</span>
+      </div>
+      <p style="color:var(--muted);font-size:13.5px;line-height:1.6;">{{ a.body }}</p>
+    </div>
+  </div>
+  {% else %}
+  <div class="empty-state"><i class="fa fa-bullhorn"></i><h3>No Announcements</h3></div>
+  {% endfor %}
+</div>
+
+<!-- SETTINGS TAB -->
+<div id="tab-settings" style="display:none;">
+  <div class="card" style="max-width:400px;">
+    <div class="card-header"><span class="card-title">Change Password</span></div>
+    <div class="card-body">
+      <div class="form-group"><label>Current Password</label><input type="password" id="cp-old"></div>
+      <div class="form-group"><label>New Password</label><input type="password" id="cp-new"></div>
+      <div class="form-group"><label>Confirm New Password</label><input type="password" id="cp-confirm"></div>
+      <button class="btn btn-primary" onclick="changePass()"><i class="fa fa-key"></i> Update Password</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchTab(name, btn) {
+  ['att','marks','tt','fees','ann','settings'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = t===name ? '' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+async function changePass() {
+  const o = document.getElementById('cp-old').value;
+  const n = document.getElementById('cp-new').value;
+  const c = document.getElementById('cp-confirm').value;
+  if (n !== c) { toast('Passwords do not match','error'); return; }
+  if (n.length < 4) { toast('Password too short','error'); return; }
+  const d = await apiPost('/portal/change-password', {old_pw:o, new_pw:n});
+  if (d.success) toast('Password updated!','success');
+  else toast(d.error||'Failed','error');
+}
+</script>
+{% endblock %}

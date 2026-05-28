@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Settings — EduTrack Pro{% endblock %}
+{% block page_title %}Settings{% endblock %}
+{% block page_sub %}Account, subjects & departments{% endblock %}
+
+{% block content %}
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('account',this)">Account</button>
+  <button class="tab" onclick="switchTab('subjects',this)">Subjects</button>
+  {% if role in ('admin','hod') %}<a href="/teachers" class="tab" style="text-decoration:none;">Teachers</a>{% endif %}
+  {% if role=='admin' %}<button class="tab" onclick="switchTab('depts',this)">Departments</button>{% endif %}
+</div>
+
+<!-- ACCOUNT -->
+<div id="tab-account">
+  <div class="card" style="max-width:440px;">
+    <div class="card-header"><span class="card-title">Change Password</span></div>
+    <div class="card-body">
+      <div class="form-group"><label>Current Password</label><input type="password" id="cp-old"></div>
+      <div class="form-group"><label>New Password</label><input type="password" id="cp-new"></div>
+      <button class="btn btn-primary" onclick="changePw()"><i class="fa fa-key"></i> Update</button>
+    </div>
+  </div>
+</div>
+
+<!-- SUBJECTS -->
+<div id="tab-subjects" style="display:none;">
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-header"><span class="card-title">Add Subject</span></div>
+    <div class="card-body">
+      <div class="input-row">
+        <div class="form-group"><label>Code *</label><input id="s-code" placeholder="CS301"></div>
+        <div class="form-group"><label>Name *</label><input id="s-name" placeholder="Operating Systems"></div>
+        <div class="form-group"><label>Department</label>
+          <select id="s-dept">{% for d in depts %}<option value="{{ d.code }}">{{ d.code }}</option>{% endfor %}</select>
+        </div>
+        <div class="form-group"><label>Semester</label>
+          <select id="s-sem">{% for s in range(1,9) %}<option value="{{ s }}">Sem {{ s }}</option>{% endfor %}</select>
+        </div>
+        <div class="form-group"><label>Credits</label><input id="s-credits" type="number" value="3" min="1" max="6"></div>
+        <div class="form-group"><label>Faculty</label><input id="s-faculty" placeholder="Dr. Smith"></div>
+        <div class="form-group"><label>Assigned Teacher</label>
+          <select id="s-teacher">
+            <option value="">Unassigned</option>
+            {% for t in teachers %}
+            <option value="{{ t.id }}">{{ t.full_name or t.username }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="addSubject()"><i class="fa fa-plus"></i> Add Subject</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Code</th><th>Name</th><th>Dept</th><th>Sem</th><th>Credits</th><th>Teacher</th>{% if role in ('admin','hod') %}<th></th>{% endif %}</tr></thead>
+        <tbody>
+          {% for sub in subjects %}
+          <tr>
+            <td class="mono">{{ sub.code }}</td>
+            <td>{{ sub.name }}</td>
+            <td>{{ sub.department }}</td>
+            <td>Sem {{ sub.semester }}</td>
+            <td>{{ sub.credits }}</td>
+            <td style="color:var(--muted);">{{ sub.teacher_name or sub.faculty or '-' }}</td>
+            {% if role in ('admin','hod') %}
+            <td><button class="btn btn-danger btn-sm btn-icon" onclick="delSubject({{ sub.id }})"><i class="fa fa-trash"></i></button></td>
+            {% endif %}
+          </tr>
+          {% else %}<tr><td colspan="7" style="text-align:center;color:var(--muted);">No subjects yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- DEPARTMENTS (admin only) -->
+{% if role=='admin' %}
+<div id="tab-depts" style="display:none;">
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-header"><span class="card-title">Add Department</span></div>
+    <div class="card-body">
+      <div class="input-row">
+        <div class="form-group"><label>Name *</label><input id="d-name" placeholder="Computer Science Engineering"></div>
+        <div class="form-group"><label>Code *</label><input id="d-code" placeholder="CSE"></div>
+        <div class="form-group"><label>HOD Name</label><input id="d-hod" placeholder="Dr. Sharma"></div>
+      </div>
+      <button class="btn btn-primary" onclick="addDept()"><i class="fa fa-plus"></i> Add Department</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Code</th><th>Name</th><th>HOD</th><th></th></tr></thead>
+        <tbody>
+          {% for d in depts %}
+          <tr>
+            <td class="mono">{{ d.code }}</td>
+            <td>{{ d.name }}</td>
+            <td>{{ d.hod_name or '—' }}</td>
+            <td><button class="btn btn-danger btn-sm btn-icon" onclick="delDept({{ d.id }})"><i class="fa fa-trash"></i></button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchTab(name, btn) {
+  ['account','subjects','depts'].forEach(t => {
+    const el = document.getElementById('tab-'+t);
+    if (el) el.style.display = t===name ? '' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+async function changePw() {
+  const d = await apiPost('/settings/change-password', {old_pw: document.getElementById('cp-old').value, new_pw: document.getElementById('cp-new').value});
+  toast(d.success ? 'Password updated!' : (d.error||'Failed'), d.success ? 'success' : 'error');
+}
+async function addSubject() {
+  const d = await apiPost('/settings/subjects/add', {
+    code: document.getElementById('s-code').value,
+    name: document.getElementById('s-name').value,
+    department: document.getElementById('s-dept').value,
+    semester: document.getElementById('s-sem').value,
+    credits: document.getElementById('s-credits').value,
+    faculty: document.getElementById('s-faculty').value,
+    teacher_id: document.getElementById('s-teacher').value,
+  });
+  if (d.success) { toast('Subject added!','success'); setTimeout(()=>location.reload(),700); }
+  else toast('Failed (code may already exist)','error');
+}
+async function delSubject(id) {
+  confirmDelete(`/settings/subjects/delete/${id}`, 'Delete this subject?', () => location.reload());
+}
+async function addDept() {
+  const d = await apiPost('/settings/departments/add', {
+    name: document.getElementById('d-name').value,
+    code: document.getElementById('d-code').value,
+    hod_name: document.getElementById('d-hod').value,
+  });
+  if (d.success) { toast('Department added!','success'); setTimeout(()=>location.reload(),700); }
+  else toast('Failed','error');
+}
+async function delDept(id) {
+  confirmDelete(`/settings/departments/delete/${id}`, 'Delete this department?', () => location.reload());
+}
+</script>
+{% endblock %}

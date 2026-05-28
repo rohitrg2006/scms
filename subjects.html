@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Subjects - EduTrack Pro{% endblock %}
+{% block page_title %}Subject Management{% endblock %}
+{% block page_sub %}Create subjects and assign them to teachers{% endblock %}
+
+{% block content %}
+{% if error %}
+<div class="alert alert-error"><i class="fa fa-circle-exclamation"></i>{{ error }}</div>
+{% elif added %}
+<div class="alert alert-success"><i class="fa fa-circle-check"></i>Subject added successfully.</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:18px;">
+  <div class="card-header">
+    <span class="card-title"><i class="fa fa-book-open" style="color:var(--accent2);"></i> Add Subject</span>
+    <a href="/teachers" class="btn btn-ghost btn-sm"><i class="fa fa-chalkboard-user"></i>Teachers</a>
+  </div>
+  <div class="card-body">
+    <form method="post">
+      <div class="input-row">
+        <div class="form-group"><label>Code *</label><input name="code" placeholder="CS501" required></div>
+        <div class="form-group"><label>Name *</label><input name="name" placeholder="Computer Networks" required></div>
+        <div class="form-group">
+          <label>Department</label>
+          <select name="department">
+            {% for d in depts %}<option value="{{ d.code }}">{{ d.code }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group"><label>Semester</label><input name="semester" type="number" min="1" max="8" value="5"></div>
+        <div class="form-group"><label>Credits</label><input name="credits" type="number" min="1" max="6" value="3"></div>
+        <div class="form-group">
+          <label>Assign Teacher</label>
+          <select name="teacher_id">
+            <option value="0">Unassigned</option>
+            {% for teacher in teachers %}
+            <option value="{{ teacher.id }}">{{ teacher.full_name or teacher.username }} ({{ teacher.username }})</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary" type="submit"><i class="fa fa-plus"></i>Add Subject</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><span class="card-title"><i class="fa fa-list-check" style="color:var(--green);"></i> Subject List</span></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Subject</th><th>Class</th><th>Credits</th><th>Assigned Teacher</th><th></th></tr></thead>
+      <tbody>
+        {% for subject in subjects %}
+        <tr>
+          <td>
+            <div style="font-weight:700;">{{ subject.name }}</div>
+            <div class="mono" style="color:var(--muted);font-size:12px;">{{ subject.code }}</div>
+          </td>
+          <td><span class="badge badge-blue">{{ subject.department }} Sem {{ subject.semester }}</span></td>
+          <td>{{ subject.credits }}</td>
+          <td>
+            <form method="post" action="/subjects/{{ subject.id }}/assign" style="display:flex;gap:8px;align-items:center;">
+              <select name="teacher_id" style="min-width:220px;">
+                <option value="0">Unassigned</option>
+                {% for teacher in teachers %}
+                <option value="{{ teacher.id }}" {% if subject.teacher_id == teacher.id %}selected{% endif %}>
+                  {{ teacher.full_name or teacher.username }}
+                </option>
+                {% endfor %}
+              </select>
+              <button class="btn btn-ghost btn-sm btn-icon" type="submit" title="Save assignment"><i class="fa fa-check"></i></button>
+            </form>
+          </td>
+          <td style="text-align:right;">
+            <form method="post" action="/subjects/{{ subject.id }}/delete" onsubmit="return confirm('Delete this subject?');">
+              <button class="btn btn-danger btn-sm btn-icon" type="submit" title="Delete"><i class="fa fa-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5"><div class="empty-state"><i class="fa fa-book-open"></i><h3>No subjects yet</h3><p>Add a subject and assign a teacher.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

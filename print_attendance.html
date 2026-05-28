@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Attendance Sheet</title>
+<style>body{font-family:Arial,sans-serif;padding:20px;color:#000;}
+table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:6px 10px;font-size:12px;}
+th{background:#f0f0f0;}h2{margin-bottom:4px;}p{color:#555;font-size:13px;}
+@media print{button{display:none;}}
+</style></head><body>
+<button onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;">🖨 Print</button>
+<h2>Attendance Sheet — {{ today }}</h2>
+<p>{{ dept }} {% if sem %}· Sem {{ sem }}{% endif %} {% if sec %}· Section {{ sec }}{% endif %}</p>
+<table><thead><tr><th>#</th><th>Name</th><th>USN</th><th>Dept</th><th>Sem</th><th>Sec</th><th>Status</th><th>Time</th></tr></thead>
+<tbody>{% for s in today_data %}<tr><td>{{ loop.index }}</td><td>{{ s.name }}</td><td>{{ s.usn }}</td>
+<td>{{ s.department }}</td><td>{{ s.semester }}</td><td>{{ s.section }}</td>
+<td>{{ s.status }}</td><td>{{ s.time or '' }}</td></tr>{% endfor %}</tbody></table>
+</body></html>

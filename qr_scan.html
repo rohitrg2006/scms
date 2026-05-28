@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}QR Scan — EduTrack Pro{% endblock %}
+{% block page_title %}QR Code Scanner{% endblock %}
+{% block page_sub %}Scan student QR codes for attendance{% endblock %}
+{% block content %}
+<div class="card" style="max-width:480px;margin:0 auto;">
+  <div class="card-header"><span class="card-title">Scan QR Code</span></div>
+  <div class="card-body">
+    <div id="reader" style="width:100%;border-radius:8px;overflow:hidden;"></div>
+    <div id="scan-result" style="margin-top:16px;display:none;" class="alert alert-success"></div>
+    <div style="margin-top:16px;">
+      <label>Or enter USN manually:</label>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <input id="manual-usn" placeholder="Enter USN" style="flex:1;">
+        <button class="btn btn-primary" onclick="markByUSN()">Mark Present</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script>
+const scanner = new Html5QrcodeScanner("reader", {fps:10, qrbox:250});
+scanner.render(async (text) => {
+  scanner.clear();
+  const r = await fetch('/api/student/'+encodeURIComponent(text));
+  if (r.ok) {
+    const s = await r.json();
+    const d = await apiPost('/attendance/mark', {student_id: s.id, status:'Present'});
+    const res = document.getElementById('scan-result');
+    res.style.display='flex';
+    res.textContent = `✅ ${s.name} (${s.usn}) marked Present`;
+  } else {
+    toast('Student not found: '+text, 'error');
+    setTimeout(()=>scanner.render(arguments.callee, ()=>{}), 2000);
+  }
+});
+async function markByUSN() {
+  const usn = document.getElementById('manual-usn').value.trim();
+  if (!usn) return;
+  const r = await fetch('/api/student/'+encodeURIComponent(usn));
+  if (r.ok) {
+    const s = await r.json();
+    await apiPost('/attendance/mark', {student_id: s.id, status:'Present'});
+    toast(`✅ ${s.name} marked Present`,'success');
+  } else toast('Student not found','error');
+}
+</script>
+{% endblock %}

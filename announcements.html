@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Announcements — EduTrack Pro{% endblock %}
+{% block page_title %}Announcements{% endblock %}
+{% block page_sub %}College-wide notices and updates{% endblock %}
+
+{% block topbar_actions %}
+{% if role in ('admin','hod','faculty') %}
+<button class="btn btn-primary btn-sm" onclick="openModal('addAnnModal')"><i class="fa fa-plus"></i> Post Announcement</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if role in ('admin','hod','faculty') %}
+<div class="alert alert-info" style="margin-bottom:20px;">
+  <i class="fa fa-circle-info"></i>
+  Announcements are <strong>automatically emailed</strong> to all relevant recipients when posted (if email is configured).
+</div>
+{% endif %}
+
+{% for a in announcements %}
+<div class="card" style="margin-bottom:12px;">
+  <div class="card-body">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:12px;">
+      <div style="flex:1;">
+        {% if a.pinned %}<span class="badge badge-yellow" style="margin-right:6px;">📌 Pinned</span>{% endif %}
+        <span class="badge badge-gray" style="margin-right:8px;">{{ a.target|title }}</span>
+        {% if a.department %}<span class="badge badge-blue" style="margin-right:8px;">{{ a.department }}</span>{% endif %}
+        <strong style="font-size:16px;">{{ a.title }}</strong>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <span style="font-size:11px;color:var(--muted);">{{ a.created_at[:10] }}</span>
+        {% if role in ('admin','hod','faculty') %}
+        <button class="btn btn-ghost btn-sm btn-icon" title="Pin/Unpin" onclick="pinAnn({{ a.id }}, this)"><i class="fa fa-thumbtack"></i></button>
+        <button class="btn btn-danger btn-sm btn-icon" title="Delete" onclick="delAnn({{ a.id }})"><i class="fa fa-trash"></i></button>
+        {% endif %}
+      </div>
+    </div>
+    <p style="color:var(--muted);font-size:14px;line-height:1.7;">{{ a.body }}</p>
+    <div style="margin-top:10px;font-size:11px;color:var(--muted);">Posted by <strong>{{ a.author }}</strong></div>
+  </div>
+</div>
+{% else %}
+<div class="empty-state"><i class="fa fa-bullhorn"></i><h3>No Announcements</h3><p>Nothing posted yet.</p></div>
+{% endfor %}
+
+<!-- ADD MODAL -->
+{% if role in ('admin','hod','faculty') %}
+<div class="modal-overlay" id="addAnnModal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-title">Post Announcement <button class="modal-close" onclick="closeModal('addAnnModal')">✕</button></div>
+    <div class="form-group"><label>Title *</label><input id="ann-title" placeholder="Announcement title"></div>
+    <div class="form-group"><label>Message *</label><textarea id="ann-body" rows="4" placeholder="Write your announcement…" style="resize:vertical;"></textarea></div>
+    <div class="input-row">
+      <div class="form-group"><label>Target Audience</label>
+        <select id="ann-target">
+          <option value="all">Everyone</option>
+          <option value="student">Students Only</option>
+          <option value="parent">Parents Only</option>
+          <option value="faculty">Faculty Only</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Department (optional)</label>
+        <select id="ann-dept">
+          <option value="">All Departments</option>
+          {% for d in depts %}<option value="{{ d.code }}">{{ d.code }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="ann-pin" style="width:auto;"> Pin this announcement
+      </label>
+    </div>
+    <div class="alert alert-info" style="font-size:12px;">
+      📧 This will automatically be emailed to all matching recipients if email is enabled.
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn btn-ghost" onclick="closeModal('addAnnModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="postAnn()"><i class="fa fa-paper-plane"></i> Post & Email</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+async function postAnn() {
+  const title  = document.getElementById('ann-title').value.trim();
+  const body   = document.getElementById('ann-body').value.trim();
+  const target = document.getElementById('ann-target').value;
+  const dept   = document.getElementById('ann-dept').value;
+  const pinned = document.getElementById('ann-pin').checked ? 1 : 0;
+  if (!title || !body) { toast('Title and message required','error'); return; }
+  const d = await apiPost('/announcements/add', {title, body, target, dept, pinned});
+  if (d.success) { toast('Posted & emailed!','success'); setTimeout(()=>location.reload(),800); }
+  else toast('Failed','error');
+}
+async function delAnn(id) {
+  confirmDelete(`/announcements/delete/${id}`, 'Delete this announcement?', () => location.reload());
+}
+async function pinAnn(id, btn) {
+  const d = await apiPost(`/announcements/pin/${id}`, {});
+  if (d.success) { toast('Updated','info'); setTimeout(()=>location.reload(),500); }
+}
+</script>
+{% endblock %}

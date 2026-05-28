@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>EduTrack Pro — Login</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <style>
+    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Plus Jakarta Sans',sans-serif; background:#0d1117; color:#e6edf3;
+           min-height:100vh; display:flex; align-items:center; justify-content:center; }
+
+    .login-wrap { display:flex; width:100%; max-width:900px; min-height:540px; border-radius:20px;
+                  overflow:hidden; border:1px solid #30363d; box-shadow:0 24px 80px rgba(0,0,0,.5); }
+
+    /* Left panel */
+    .login-left { width:42%; background:linear-gradient(160deg,#1e3a5f 0%,#0d1117 100%);
+                  padding:48px 40px; display:flex; flex-direction:column; justify-content:space-between;
+                  position:relative; overflow:hidden; }
+    .login-left::before { content:''; position:absolute; width:300px; height:300px; border-radius:50%;
+                          background:rgba(37,99,235,.1); top:-80px; left:-80px; }
+    .login-left::after  { content:''; position:absolute; width:200px; height:200px; border-radius:50%;
+                          background:rgba(37,99,235,.08); bottom:-60px; right:-60px; }
+    .ll-logo { display:flex; align-items:center; gap:12px; position:relative; z-index:1; }
+    .ll-icon { width:44px; height:44px; background:#2563eb; border-radius:12px; display:flex;
+               align-items:center; justify-content:center; font-size:18px; font-weight:900; color:white; }
+    .ll-title { font-size:18px; font-weight:800; }
+    .ll-sub   { font-size:12px; color:#7d8590; margin-top:2px; }
+    .ll-body  { position:relative; z-index:1; }
+    .ll-heading { font-size:26px; font-weight:800; line-height:1.3; margin-bottom:12px; }
+    .ll-desc { font-size:13.5px; color:#7d8590; line-height:1.7; }
+
+    /* Role selector */
+    .role-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:28px; }
+    .role-card { padding:12px; border-radius:10px; border:1px solid #30363d; cursor:pointer;
+                 text-align:center; transition:all .15s; background:#161b22; }
+    .role-card:hover  { border-color:#2563eb; background:rgba(37,99,235,.08); }
+    .role-card.active { border-color:#2563eb; background:rgba(37,99,235,.15); }
+    .role-card i { font-size:20px; margin-bottom:6px; display:block; }
+    .role-card span { font-size:12px; font-weight:600; }
+    .rc-admin   i { color:#f59e0b; }
+    .rc-hod     i { color:#a855f7; }
+    .rc-faculty i { color:#06b6d4; }
+    .rc-teacher i { color:#38bdf8; }
+    .rc-student i { color:#22c55e; }
+    .rc-parent  i { color:#f97316; }
+
+    /* Right panel */
+    .login-right { flex:1; background:#161b22; padding:48px 44px; display:flex;
+                   flex-direction:column; justify-content:center; }
+    .form-title { font-size:22px; font-weight:800; margin-bottom:6px; }
+    .form-sub   { font-size:13px; color:#7d8590; margin-bottom:30px; }
+
+    .form-group { margin-bottom:16px; }
+    label { display:block; font-size:11px; font-weight:700; color:#7d8590;
+            text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+    .input-wrap { position:relative; }
+    .input-wrap i { position:absolute; left:12px; top:50%; transform:translateY(-50%);
+                    color:#7d8590; font-size:14px; pointer-events:none; }
+    input { width:100%; background:#21262d; border:1px solid #30363d; border-radius:9px;
+            padding:11px 12px 11px 38px; color:#e6edf3; font-size:13.5px;
+            font-family:inherit; outline:none; transition:border .15s; }
+    input:focus { border-color:#2563eb; }
+
+    .error-box { background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.3);
+                 border-radius:9px; padding:11px 14px; color:#ef4444; font-size:13px;
+                 margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+
+    .submit-btn { width:100%; background:#2563eb; color:white; border:none; border-radius:10px;
+                  padding:12px; font-size:14px; font-weight:700; cursor:pointer;
+                  font-family:inherit; transition:background .15s; margin-top:8px; }
+    .submit-btn:hover { background:#1d4ed8; }
+
+    .default-creds { margin-top:20px; padding:14px; background:#21262d; border-radius:10px; }
+    .dc-title { font-size:11px; font-weight:700; color:#7d8590; text-transform:uppercase;
+                letter-spacing:.5px; margin-bottom:8px; }
+    .dc-row   { display:flex; justify-content:space-between; font-size:12px; color:#7d8590;
+                padding:3px 0; border-bottom:1px solid #30363d; }
+    .dc-row:last-child { border-bottom:none; }
+    .dc-val   { font-family:'JetBrains Mono',monospace; color:#e6edf3; font-size:11.5px; }
+
+    @media(max-width:680px) { .login-wrap { flex-direction:column; max-width:420px; }
+      .login-left { width:100%; padding:30px 28px; } .role-grid { grid-template-columns:repeat(5,1fr); }
+      .role-card span { display:none; } }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="login-wrap">
+
+  <!-- LEFT -->
+  <div class="login-left">
+    <div class="ll-logo">
+      <div class="ll-icon">ET</div>
+      <div>
+        <div class="ll-title">EduTrack Pro</div>
+        <div class="ll-sub">Engineering College</div>
+      </div>
+    </div>
+    <div class="ll-body">
+      <div class="ll-heading">Smart College<br>Management System</div>
+      <div class="ll-desc">Attendance, Marks, Fees, and Parent Portal — all in one place.</div>
+
+      <!-- Role Selector -->
+      <div class="role-grid" id="roleGrid">
+        <div class="role-card rc-admin"   data-role="admin"   onclick="selectRole(this)">
+          <i class="fa fa-shield-halved"></i><span>Admin</span></div>
+        <div class="role-card rc-hod"     data-role="hod"     onclick="selectRole(this)">
+          <i class="fa fa-building-columns"></i><span>HOD</span></div>
+        <div class="role-card rc-faculty" data-role="faculty" onclick="selectRole(this)">
+          <i class="fa fa-chalkboard-user"></i><span>Faculty</span></div>
+        <div class="role-card rc-teacher" data-role="teacher" onclick="selectRole(this)">
+          <i class="fa fa-person-chalkboard"></i><span>Teacher</span></div>
+        <div class="role-card rc-student" data-role="student" onclick="selectRole(this)">
+          <i class="fa fa-user-graduate"></i><span>Student</span></div>
+        <div class="role-card rc-parent"  data-role="parent"  onclick="selectRole(this)">
+          <i class="fa fa-house-user"></i><span>Parent</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="login-right">
+    <div class="form-title">Welcome back</div>
+    <div class="form-sub" id="roleHint">Select your role and sign in</div>
+
+    {% if error %}
+    <div class="error-box"><i class="fa fa-circle-exclamation"></i>{{ error }}</div>
+    {% endif %}
+
+    <form method="POST">
+      <input type="hidden" name="role" id="roleInput" value="">
+      <div class="form-group">
+        <label>Username</label>
+        <div class="input-wrap">
+          <i class="fa fa-user"></i>
+          <input type="text" name="username" placeholder="Enter your username" required autofocus>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <div class="input-wrap">
+          <i class="fa fa-lock"></i>
+          <input type="password" name="password" placeholder="Enter your password" required>
+        </div>
+      </div>
+      <button type="submit" class="submit-btn">Sign In →</button>
+    </form>
+
+    <div class="default-creds">
+      <div class="dc-title">Default Credentials</div>
+      <div class="dc-row"><span>Admin</span><span class="dc-val">admin / admin123</span></div>
+      <div class="dc-row"><span>HOD</span><span class="dc-val">hod / hod123</span></div>
+      <div class="dc-row"><span>Faculty</span><span class="dc-val">faculty / faculty123</span></div>
+      <div class="dc-row"><span>Teacher</span><span class="dc-val">teacher / teacher123</span></div>
+    </div>
+  </div>
+
+</div>
+<script>
+const hints = {
+  admin:'Admin — full system access',
+  hod:'Head of Department — dept-level access',
+  faculty:'Faculty — attendance & marks entry',
+  teacher:'Teacher - assigned subject access',
+  student:'Student — view your portal',
+  parent:'Parent — view your child\'s progress'
+};
+function selectRole(el) {
+  document.querySelectorAll('.role-card').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  const role = el.dataset.role;
+  document.getElementById('roleInput').value = role;
+  document.getElementById('roleHint').textContent = hints[role] || 'Sign in to continue';
+}
+</script>
+</body>
+</html>

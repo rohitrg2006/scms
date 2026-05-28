@@ -1,0 +1,558 @@
+{% extends "base.html" %}
+{% block title %}Face Scan — EduTrack Pro{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title"><i class="fa-solid fa-face-viewfinder me-2"></i>Face Recognition Attendance</h1>
+    <p class="page-subtitle">Mark attendance by scanning student faces in real time</p>
+  </div>
+  <a href="/attendance/face-enroll" class="btn btn-outline-secondary btn-sm">
+    <i class="fa-solid fa-user-plus me-1"></i>Manage Enrolments
+  </a>
+</div>
+
+<!-- Filter bar -->
+<div class="card mb-4">
+  <div class="card-body py-3">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label small text-muted mb-1">Department</label>
+        <select id="fDept" class="form-select form-select-sm">
+          <option value="">All Departments</option>
+          {% for d in depts %}
+          <option value="{{ d.code }}">{{ d.code }} — {{ d.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-muted mb-1">Semester</label>
+        <select id="fSem" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for i in range(1,9) %}<option value="{{ i }}">Sem {{ i }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-muted mb-1">Section</label>
+        <select id="fSec" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for s in ["A","B","C","D"] %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-muted mb-1">Subject</label>
+        <select id="fSubject" class="form-select form-select-sm">
+          {% if role != 'teacher' %}<option value="">Overall</option>{% endif %}
+          {% for s in subjects %}
+          <option value="{{ s.id }}">{{ s.code }} — {{ s.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-muted mb-1">Period</label>
+        <select id="fPeriod" class="form-select form-select-sm">
+          {% for i in range(1,9) %}<option value="{{ i }}">Period {{ i }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Camera column -->
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="fa-solid fa-camera me-2 text-primary"></i>Live Camera</span>
+        <div class="d-flex gap-2">
+          <span id="scanMode" class="badge bg-primary">Auto Scan</span>
+          <button id="btnToggleAuto" class="btn btn-sm btn-outline-secondary">Pause</button>
+        </div>
+      </div>
+      <div class="card-body p-0 position-relative" style="background:#0a0a0a;">
+        <video id="videoEl" autoplay playsinline muted
+               style="width:100%;display:block;border-radius:0 0 0 0;min-height:340px;object-fit:cover;"></video>
+        <canvas id="snapCanvas" style="display:none;"></canvas>
+
+        <!-- Overlay face box -->
+        <div id="faceOverlay" class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="pointer-events:none;">
+          <div id="faceBox" style="width:220px;height:220px;border:2px dashed rgba(79,142,247,0.5);border-radius:50%;transition:border-color .3s,box-shadow .3s;"></div>
+        </div>
+
+        <!-- Status pill -->
+        <div class="position-absolute bottom-0 start-0 w-100 text-center pb-3" style="pointer-events:none;">
+          <span id="camStatus" class="badge bg-dark bg-opacity-75 px-3 py-2 fs-6">
+            <i class="fa-solid fa-circle-notch fa-spin me-1"></i>Starting camera…
+          </span>
+        </div>
+      </div>
+
+      <!-- Camera controls -->
+      <div class="card-footer d-flex gap-2 flex-wrap">
+        <button id="btnStartCam" class="btn btn-primary btn-sm" style="display:none;">
+          <i class="fa-solid fa-video me-1"></i>Start Camera
+        </button>
+        <button id="btnStopCam" class="btn btn-outline-secondary btn-sm">
+          <i class="fa-solid fa-video-slash me-1"></i>Stop Camera
+        </button>
+        <button id="btnManualSnap" class="btn btn-success btn-sm">
+          <i class="fa-solid fa-face-smile me-1"></i>Scan Now
+        </button>
+        <div class="ms-auto d-flex align-items-center gap-2 text-muted small">
+          <i class="fa-solid fa-clock"></i>
+          <span id="autoTimer">Scanning every <b>3s</b></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results column -->
+  <div class="col-lg-5 d-flex flex-column gap-3">
+    <!-- Last match card -->
+    <div class="card" id="matchCard" style="display:none!important;">
+      <div class="card-header">
+        <i class="fa-solid fa-circle-check text-success me-2"></i>Last Match
+      </div>
+      <div class="card-body">
+        <div class="d-flex align-items-center gap-3">
+          <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold text-white fs-4"
+               id="matchAvatar"
+               style="width:56px;height:56px;min-width:56px;background:linear-gradient(135deg,#4f8ef7,#6366f1);">
+          </div>
+          <div>
+            <div class="fw-bold fs-5" id="matchName">—</div>
+            <div class="text-muted small" id="matchUsn">—</div>
+            <div class="text-muted small" id="matchDept">—</div>
+          </div>
+          <span class="ms-auto badge bg-success px-3 py-2">Present ✓</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- No-match card -->
+    <div class="card border-warning" id="noMatchCard" style="display:none!important;">
+      <div class="card-body text-center py-3">
+        <i class="fa-solid fa-face-frown text-warning fs-2 mb-2 d-block"></i>
+        <div class="fw-semibold text-warning" id="noMatchMsg">Face not recognised</div>
+        <div class="text-muted small mt-1">Ensure the student is enrolled and facing the camera clearly.</div>
+      </div>
+    </div>
+
+    <!-- Today's recognised log -->
+    <div class="card flex-grow-1">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="fa-solid fa-list-check me-2 text-success"></i>Recognised Today</span>
+        <span id="recognisedCount" class="badge bg-success rounded-pill">0</span>
+      </div>
+      <div class="card-body p-0" style="max-height:380px;overflow-y:auto;">
+        <table class="table table-sm table-hover mb-0" id="recognisedTable">
+          <thead class="sticky-top" style="background:var(--bg-card);">
+            <tr>
+              <th class="ps-3">Name</th>
+              <th>USN</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody id="recognisedBody">
+            <tr id="emptyRow">
+              <td colspan="3" class="text-center text-muted py-4">
+                <i class="fa-solid fa-face-meh d-block mb-2 fs-3"></i>
+                No faces recognised yet
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Enrollment management section -->
+<div class="card mt-4">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span><i class="fa-solid fa-users me-2 text-primary"></i>Face Enrolment Status</span>
+    <div class="d-flex gap-2">
+      <button class="btn btn-sm btn-outline-secondary" id="btnRefreshEnrol">
+        <i class="fa-solid fa-rotate-right me-1"></i>Refresh
+      </button>
+    </div>
+  </div>
+  <div class="card-body pb-2">
+    <div class="row g-2 mb-3">
+      <div class="col-md-3">
+        <select id="eDept" class="form-select form-select-sm">
+          <option value="">All Departments</option>
+          {% for d in depts %}
+          <option value="{{ d.code }}">{{ d.code }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select id="eSem" class="form-select form-select-sm">
+          <option value="">All Sem</option>
+          {% for i in range(1,9) %}<option value="{{ i }}">Sem {{ i }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select id="eSec" class="form-select form-select-sm">
+          <option value="">All Sec</option>
+          {% for s in ["A","B","C","D"] %}<option value="{{ s }}">Sec {{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
+          <input type="text" id="eSearch" class="form-control" placeholder="Search name / USN…">
+        </div>
+      </div>
+    </div>
+    <div style="max-height:320px;overflow-y:auto;">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="sticky-top" style="background:var(--bg-card);">
+          <tr>
+            <th class="ps-2">Name</th>
+            <th>USN</th>
+            <th>Dept / Sem</th>
+            <th>Status</th>
+            <th class="text-end pe-2">Action</th>
+          </tr>
+        </thead>
+        <tbody id="enrolBody">
+          <tr><td colspan="5" class="text-center text-muted py-3">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Enrol Modal -->
+<div class="modal fade" id="enrolModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="background:var(--bg-card);border:1px solid var(--border-color);">
+      <div class="modal-header border-bottom" style="border-color:var(--border-color)!important;">
+        <h5 class="modal-title"><i class="fa-solid fa-face-viewfinder me-2 text-primary"></i>Enrol Face</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          Enrolling: <strong id="enrolStudentName">—</strong>
+          (<span id="enrolStudentUsn">—</span>)
+        </p>
+        <div class="position-relative mb-3" style="background:#0a0a0a;border-radius:10px;overflow:hidden;min-height:260px;">
+          <video id="enrolVideo" autoplay playsinline muted style="width:100%;display:block;"></video>
+          <canvas id="enrolCanvas" style="display:none;"></canvas>
+          <div class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="pointer-events:none;">
+            <div style="width:180px;height:180px;border:2px dashed rgba(79,142,247,0.6);border-radius:50%;"></div>
+          </div>
+        </div>
+        <div id="enrolMsg" class="alert d-none"></div>
+        <div class="d-flex gap-2">
+          <button id="btnCaptureFace" class="btn btn-primary flex-grow-1">
+            <i class="fa-solid fa-camera me-1"></i>Capture &amp; Enrol
+          </button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+#faceBox.scanning  { border-color: #4f8ef7; box-shadow: 0 0 0 4px rgba(79,142,247,.2); border-style:solid; }
+#faceBox.match-ok  { border-color: #22c55e; box-shadow: 0 0 0 6px rgba(34,197,94,.25); border-style:solid; }
+#faceBox.match-err { border-color: #ef4444; box-shadow: 0 0 0 6px rgba(239,68,68,.2);  border-style:solid; }
+</style>
+
+<script>
+/* ─── state ─────────────────────────────────────────────────────────────── */
+let stream = null;
+let autoInterval = null;
+let autoRunning = true;
+let recognisedSet = new Set();
+let recognisedList = [];
+
+/* current enrol session */
+let enrolStream = null;
+let enrolSid    = null;
+
+/* ─── camera helpers ─────────────────────────────────────────────────────── */
+const video  = document.getElementById("videoEl");
+const canvas = document.getElementById("snapCanvas");
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width:640, height:480 }, audio: false });
+    video.srcObject = stream;
+    setCamStatus("info", "Camera ready — scanning faces…");
+    document.getElementById("btnStopCam").style.display = "";
+    document.getElementById("btnStartCam").style.display = "none";
+    if (autoRunning) startAutoScan();
+  } catch(e) {
+    setCamStatus("danger", "Camera access denied: " + e.message);
+    document.getElementById("btnStartCam").style.display = "";
+    document.getElementById("btnStopCam").style.display = "none";
+  }
+}
+
+function stopCamera() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  video.srcObject = null;
+  stopAutoScan();
+  setCamStatus("secondary", "Camera stopped.");
+  document.getElementById("btnStartCam").style.display = "";
+  document.getElementById("btnStopCam").style.display = "none";
+}
+
+function captureFrame() {
+  if (!stream) return null;
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+  canvas.getContext("2d").drawImage(video, 0, 0);
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+function setCamStatus(type, msg) {
+  const el = document.getElementById("camStatus");
+  el.className = `badge px-3 py-2 fs-6 bg-${type === "info" ? "primary" : type}`;
+  el.innerHTML = msg;
+}
+
+/* ─── auto scan ──────────────────────────────────────────────────────────── */
+function startAutoScan() {
+  if (autoInterval) clearInterval(autoInterval);
+  autoInterval = setInterval(doScan, 3000);
+  document.getElementById("btnToggleAuto").textContent = "Pause";
+  document.getElementById("scanMode").textContent = "Auto Scan";
+}
+
+function stopAutoScan() {
+  if (autoInterval) { clearInterval(autoInterval); autoInterval = null; }
+}
+
+document.getElementById("btnToggleAuto").addEventListener("click", function() {
+  autoRunning = !autoRunning;
+  if (autoRunning) { startAutoScan(); this.textContent = "Pause"; }
+  else             { stopAutoScan();  this.textContent = "Resume";
+                     document.getElementById("scanMode").textContent = "Manual"; }
+});
+
+document.getElementById("btnManualSnap").addEventListener("click", doScan);
+document.getElementById("btnStartCam").addEventListener("click", startCamera);
+document.getElementById("btnStopCam").addEventListener("click", stopCamera);
+
+/* ─── scan logic ──────────────────────────────────────────────────────────── */
+async function doScan() {
+  const img = captureFrame();
+  if (!img) return;
+
+  const faceBox = document.getElementById("faceBox");
+  faceBox.className = "scanning";
+  setCamStatus("info", '<i class="fa-solid fa-spinner fa-spin me-1"></i>Recognising…');
+
+  const payload = {
+    image:            img,
+    subject_id:       document.getElementById("fSubject").value || null,
+    period_no:        document.getElementById("fPeriod").value || 1,
+    mark_attendance:  true,
+  };
+
+  try {
+    const res  = await fetch("/api/face-recognize", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      faceBox.className = "match-ok";
+      setCamStatus("success",
+        `<i class="fa-solid fa-circle-check me-1"></i>Present: <b>${data.name}</b>`);
+      showMatchCard(data);
+
+      // De-duplicate within session
+      if (!recognisedSet.has(data.student_id)) {
+        recognisedSet.add(data.student_id);
+        recognisedList.unshift({ ...data, time: new Date().toLocaleTimeString() });
+        renderRecognisedTable();
+      }
+
+      setTimeout(() => { faceBox.className = ""; setCamStatus("info", "Scanning…"); }, 2000);
+    } else {
+      faceBox.className = "match-err";
+      showNoMatchCard(data.error || "Face not recognised.");
+      setCamStatus("warning",
+        `<i class="fa-solid fa-circle-xmark me-1"></i>${data.error || "Not recognised"}`);
+      setTimeout(() => { faceBox.className = ""; setCamStatus("info", "Scanning…"); }, 1500);
+    }
+  } catch(e) {
+    faceBox.className = "";
+    setCamStatus("danger", "Network error: " + e.message);
+  }
+}
+
+/* ─── match / no-match cards ─────────────────────────────────────────────── */
+function showMatchCard(d) {
+  document.getElementById("matchCard").style.display = "";
+  document.getElementById("noMatchCard").style.display = "none";
+  document.getElementById("matchName").textContent = d.name;
+  document.getElementById("matchUsn").textContent  = d.usn;
+  document.getElementById("matchDept").textContent =
+    `${d.department} · Sem ${d.semester} · Sec ${d.section}`;
+  document.getElementById("matchAvatar").textContent =
+    d.name.trim().split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase();
+}
+
+function showNoMatchCard(msg) {
+  document.getElementById("matchCard").style.display = "none";
+  document.getElementById("noMatchCard").style.display = "";
+  document.getElementById("noMatchMsg").textContent = msg;
+}
+
+/* ─── recognised table ───────────────────────────────────────────────────── */
+function renderRecognisedTable() {
+  const tbody = document.getElementById("recognisedBody");
+  document.getElementById("recognisedCount").textContent = recognisedList.length;
+  if (recognisedList.length === 0) {
+    tbody.innerHTML = `<tr id="emptyRow"><td colspan="3" class="text-center text-muted py-4">
+      <i class="fa-solid fa-face-meh d-block mb-2 fs-3"></i>No faces recognised yet</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = recognisedList.map(r => `
+    <tr>
+      <td class="ps-3">
+        <div class="fw-semibold">${r.name}</div>
+        <small class="text-muted">${r.department} · Sem ${r.semester}</small>
+      </td>
+      <td><span class="badge bg-secondary">${r.usn}</span></td>
+      <td class="text-muted small">${r.time}</td>
+    </tr>`).join("");
+}
+
+/* ─── enrolment table ────────────────────────────────────────────────────── */
+async function loadEnrolTable() {
+  const dept = document.getElementById("eDept").value;
+  const sem  = document.getElementById("eSem").value;
+  const sec  = document.getElementById("eSec").value;
+  const q    = new URLSearchParams({ dept, sem, sec });
+  const res  = await fetch("/api/face-enrollment-status?" + q);
+  const data = await res.json();
+  renderEnrolTable(data.students || []);
+}
+
+function renderEnrolTable(students) {
+  const search = document.getElementById("eSearch").value.toLowerCase();
+  const filtered = students.filter(s =>
+    s.name.toLowerCase().includes(search) ||
+    s.usn.toLowerCase().includes(search));
+  const tbody = document.getElementById("enrolBody");
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">No students found</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map(s => `
+    <tr data-sid="${s.id}" data-name="${s.name}" data-usn="${s.usn}">
+      <td class="ps-2 fw-semibold">${s.name}</td>
+      <td><small class="badge bg-secondary">${s.usn}</small></td>
+      <td class="text-muted small">${s.department} / Sem ${s.semester} / ${s.section}</td>
+      <td>
+        ${s.face_enrolled
+          ? `<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Enrolled</span>
+             <span class="text-muted" style="font-size:11px;"> ${(s.enrolled_at||'').split('T')[0]}</span>`
+          : `<span class="badge bg-warning text-dark">Not enrolled</span>`}
+      </td>
+      <td class="text-end pe-2">
+        <button class="btn btn-xs btn-primary btn-sm py-0 px-2 btnEnrolFace"
+                data-sid="${s.id}" data-name="${s.name}" data-usn="${s.usn}">
+          <i class="fa-solid fa-camera me-1"></i>${s.face_enrolled ? "Re-enrol" : "Enrol"}
+        </button>
+        ${s.face_enrolled
+          ? `<button class="btn btn-xs btn-outline-danger btn-sm py-0 px-2 ms-1 btnDeleteFace"
+                     data-sid="${s.id}" data-name="${s.name}">
+               <i class="fa-solid fa-trash"></i>
+             </button>` : ''}
+      </td>
+    </tr>`).join("");
+
+  // attach events
+  tbody.querySelectorAll(".btnEnrolFace").forEach(btn => {
+    btn.addEventListener("click", () => openEnrolModal(
+      btn.dataset.sid, btn.dataset.name, btn.dataset.usn));
+  });
+  tbody.querySelectorAll(".btnDeleteFace").forEach(btn => {
+    btn.addEventListener("click", () => deleteFace(btn.dataset.sid, btn.dataset.name));
+  });
+}
+
+/* ─── enrol modal ────────────────────────────────────────────────────────── */
+const enrolModal = new bootstrap.Modal(document.getElementById("enrolModal"));
+const enrolVideo  = document.getElementById("enrolVideo");
+const enrolCanvas = document.getElementById("enrolCanvas");
+
+async function openEnrolModal(sid, name, usn) {
+  enrolSid = parseInt(sid);
+  document.getElementById("enrolStudentName").textContent = name;
+  document.getElementById("enrolStudentUsn").textContent  = usn;
+  document.getElementById("enrolMsg").className = "alert d-none";
+  enrolModal.show();
+  // start enrol camera
+  try {
+    enrolStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+    enrolVideo.srcObject = enrolStream;
+  } catch(e) {
+    setEnrolMsg("danger", "Camera error: " + e.message);
+  }
+}
+
+document.getElementById("enrolModal").addEventListener("hidden.bs.modal", () => {
+  if (enrolStream) { enrolStream.getTracks().forEach(t => t.stop()); enrolStream = null; }
+});
+
+document.getElementById("btnCaptureFace").addEventListener("click", async () => {
+  if (!enrolStream || !enrolSid) return;
+  enrolCanvas.width  = enrolVideo.videoWidth  || 640;
+  enrolCanvas.height = enrolVideo.videoHeight || 480;
+  enrolCanvas.getContext("2d").drawImage(enrolVideo, 0, 0);
+  const b64 = enrolCanvas.toDataURL("image/jpeg", 0.9);
+
+  setEnrolMsg("info", '<i class="fa-solid fa-spinner fa-spin me-1"></i>Processing…');
+
+  const res  = await fetch(`/students/${enrolSid}/enroll-face`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ image: b64 }),
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    setEnrolMsg("success", `<i class="fa-solid fa-circle-check me-1"></i>${data.message}`);
+    setTimeout(() => { enrolModal.hide(); loadEnrolTable(); }, 1200);
+  } else {
+    setEnrolMsg("danger", data.error || "Enrolment failed.");
+  }
+});
+
+function setEnrolMsg(type, html) {
+  const el = document.getElementById("enrolMsg");
+  el.className = `alert alert-${type}`;
+  el.innerHTML = html;
+}
+
+/* ─── delete face ────────────────────────────────────────────────────────── */
+async function deleteFace(sid, name) {
+  if (!confirm(`Remove face enrolment for ${name}?`)) return;
+  await fetch(`/students/${sid}/delete-face`, { method:"POST" });
+  loadEnrolTable();
+}
+
+/* ─── filter/search events ───────────────────────────────────────────────── */
+["eDept","eSem","eSec"].forEach(id =>
+  document.getElementById(id).addEventListener("change", loadEnrolTable));
+document.getElementById("eSearch").addEventListener("input", () => loadEnrolTable());
+document.getElementById("btnRefreshEnrol").addEventListener("click", loadEnrolTable);
+
+/* ─── init ───────────────────────────────────────────────────────────────── */
+startCamera();
+loadEnrolTable();
+</script>
+{% endblock %}

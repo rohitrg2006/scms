@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Reports — EduTrack Pro{% endblock %}
+{% block page_title %}Attendance Reports{% endblock %}
+{% block page_sub %}Detailed attendance analytics{% endblock %}
+
+{% block topbar_actions %}
+<a href="/export/attendance?dept={{ dept_filter }}&sem={{ sem_filter }}" class="btn btn-ghost btn-sm"><i class="fa fa-download"></i> Export CSV</a>
+{% endblock %}
+
+{% block content %}
+<div class="filters">
+  <select id="f-dept" onchange="applyFilters()">
+    <option value="">All Departments</option>
+    {% for d in depts %}<option value="{{ d.code }}" {% if dept_filter==d.code %}selected{% endif %}>{{ d.code }}</option>{% endfor %}
+  </select>
+  <select id="f-sem" onchange="applyFilters()">
+    <option value="">All Semesters</option>
+    {% for s in range(1,9) %}<option value="{{ s }}" {% if sem_filter==s|string %}selected{% endif %}>Sem {{ s }}</option>{% endfor %}
+  </select>
+  <input type="text" id="srch" placeholder="Search name / USN…" oninput="filterReport()" style="width:200px;">
+</div>
+
+<!-- Shortage Alert Count -->
+{% set shortages = report|selectattr('shortage')|list %}
+{% if shortages %}
+<div class="alert alert-error">
+  <i class="fa fa-triangle-exclamation"></i>
+  <strong>{{ shortages|length }} student(s)</strong> have attendance below 75% — highlighted in red below.
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>#</th><th>Name</th><th>USN</th><th>Dept</th><th>Sem</th><th>Sec</th>
+            <th>Classes</th><th>Attended</th><th>Attendance</th><th>Status</th></tr>
+      </thead>
+      <tbody id="reportBody">
+        {% for r in report %}
+        <tr data-search="{{ r.name|lower }} {{ r.usn|lower }}"
+            style="{% if r.shortage %}background:rgba(239,68,68,.04);{% endif %}">
+          <td style="color:var(--muted);">{{ loop.index }}</td>
+          <td><strong>{{ r.name }}</strong></td>
+          <td class="mono" style="font-size:12px;">{{ r.usn }}</td>
+          <td>{{ r.department }}</td>
+          <td>Sem {{ r.semester }}</td>
+          <td>{{ r.section }}</td>
+          <td>{{ r.total_classes }}</td>
+          <td>{{ r.attended }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="progress-bar" style="width:80px;">
+                <div class="progress-fill {% if r.percentage>=75 %}pf-green{% elif r.percentage>=65 %}pf-yellow{% else %}pf-red{% endif %}"
+                     style="width:{{ r.percentage }}%"></div>
+              </div>
+              <strong style="color:{% if r.percentage>=75 %}var(--green){% elif r.percentage>=65 %}var(--yellow){% else %}var(--red){% endif %};">
+                {{ r.percentage }}%
+              </strong>
+            </div>
+          </td>
+          <td>
+            {% if r.shortage %}<span class="badge badge-red">⚠️ Shortage</span>
+            {% elif r.total_classes==0 %}<span class="badge badge-gray">No Data</span>
+            {% else %}<span class="badge badge-green">✅ Good</span>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" class="empty-state"><i class="fa fa-chart-bar"></i><h3>No Data</h3></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyFilters() {
+  const dept = document.getElementById('f-dept').value;
+  const sem  = document.getElementById('f-sem').value;
+  window.location = `/reports?dept=${dept}&sem=${sem}`;
+}
+function filterReport() {
+  const q = document.getElementById('srch').value.toLowerCase();
+  document.querySelectorAll('#reportBody tr[data-search]').forEach(r => {
+    r.style.display = r.dataset.search.includes(q) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

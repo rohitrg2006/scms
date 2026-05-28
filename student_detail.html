@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}{{ student.name }} — EduTrack Pro{% endblock %}
+{% block page_title %}{{ student.name }}{% endblock %}
+{% block page_sub %}{{ student.usn }} · {{ student.department }} Sem {{ student.semester }} {{ student.section }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/fees/student/{{ student.id }}" class="btn btn-ghost btn-sm"><i class="fa fa-indian-rupee-sign"></i> Fees</a>
+<button class="btn btn-ghost btn-sm" onclick="sendEmail({{ student.id }})"><i class="fa fa-envelope"></i> Email Creds</button>
+<a href="/students" class="btn btn-ghost btn-sm"><i class="fa fa-arrow-left"></i> Back</a>
+{% endblock %}
+
+{% block content %}
+<div class="grid-2" style="margin-bottom:20px;">
+  <!-- Student Info -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Student Info</span></div>
+    <div class="card-body">
+      <table style="font-size:13.5px;">
+        <tr><td style="color:var(--muted);padding:5px 0;width:120px;">Name</td><td><strong>{{ student.name }}</strong></td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0;">USN</td><td class="mono">{{ student.usn }}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0;">Department</td><td>{{ student.department }}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0;">Semester</td><td>Sem {{ student.semester }}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0;">Section</td><td>{{ student.section }}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0;">Email</td><td>{{ student.email or '—' }}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0;">Phone</td><td>{{ student.phone or '—' }}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0;">Parent Email</td><td>{{ student.parent_email or '—' }}</td></tr>
+        <tr><td style="color:var(--muted);padding:5px 0;">Streak</td><td><span class="badge badge-green">🔥 {{ streak }} days</span></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- Attendance Summary -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Attendance Overview</span></div>
+    <div class="card-body">
+      <div style="text-align:center;margin-bottom:20px;">
+        <div style="font-size:48px;font-weight:900;color:{% if report.percentage>=75 %}var(--green){% elif report.percentage>=65 %}var(--yellow){% else %}var(--red){% endif %};">
+          {{ report.percentage or 0 }}%
+        </div>
+        <div style="color:var(--muted);font-size:13px;">{{ report.attended or 0 }} attended / {{ report.total_classes or 0 }} total</div>
+        {% if report.shortage %}<div class="badge badge-red" style="margin-top:8px;">⚠️ Below 75% — Shortage</div>{% endif %}
+      </div>
+      <!-- 30-day calendar -->
+      <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:4px;">
+        {% for d, status in cal.items() %}
+        <div title="{{ d }}" style="width:100%;aspect-ratio:1;border-radius:4px;
+          background:{% if status=='Present' %}var(--green){% elif status=='Absent' %}var(--red){% else %}var(--surface2){% endif %};
+          opacity:{% if status=='none' %}0.3{% else %}0.8{% endif %};">
+        </div>
+        {% endfor %}
+      </div>
+      <div style="display:flex;gap:12px;margin-top:10px;font-size:11px;color:var(--muted);">
+        <span>🟢 Present</span><span>🔴 Absent</span><span>⬛ No class</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Subject-wise Attendance -->
+<div class="card" style="margin-bottom:20px;">
+  <div class="card-header"><span class="card-title">Subject-wise Attendance</span></div>
+  <div class="card-body" style="padding:0;">
+    <table>
+      <thead><tr><th>Subject</th><th>Code</th><th>Classes</th><th>Attended</th><th>Attendance</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for sub in subj_att %}
+        <tr>
+          <td><strong>{{ sub.name }}</strong></td>
+          <td class="mono" style="font-size:12px;">{{ sub.code }}</td>
+          <td>{{ sub.total_classes }}</td>
+          <td>{{ sub.attended }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="progress-bar" style="width:80px;">
+                <div class="progress-fill {% if sub.percentage>=75 %}pf-green{% elif sub.percentage>=65 %}pf-yellow{% else %}pf-red{% endif %}" style="width:{{ sub.percentage }}%"></div>
+              </div>
+              <strong>{{ sub.percentage }}%</strong>
+            </div>
+          </td>
+          <td>{% if sub.shortage %}<span class="badge badge-red">⚠️ Shortage</span>
+              {% elif sub.total_classes==0 %}<span class="badge badge-gray">No Data</span>
+              {% else %}<span class="badge badge-green">✅ Good</span>{% endif %}</td>
+        </tr>
+        {% else %}<tr><td colspan="6" style="text-align:center;color:var(--muted);">No records yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Marks & Fees row -->
+<div class="grid-2" style="margin-bottom:20px;">
+  <div class="card">
+    <div class="card-header"><span class="card-title">Recent Marks</span><a href="/exams" class="btn btn-ghost btn-sm">All Exams</a></div>
+    <div class="card-body" style="padding:0;">
+      <table>
+        <thead><tr><th>Exam</th><th>Subject</th><th>Marks</th><th>Grade</th></tr></thead>
+        <tbody>
+          {% for m in marks[:8] %}
+          <tr>
+            <td>{{ m.title }}</td>
+            <td style="font-size:12px;color:var(--muted);">{{ m.subject_code }}</td>
+            <td><strong>{{ m.marks }}/{{ m.max_marks }}</strong></td>
+            <td><span class="badge badge-purple">{{ m.grade or '—' }}</span></td>
+          </tr>
+          {% else %}<tr><td colspan="4" style="text-align:center;color:var(--muted);">No marks</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Fee Summary</span><a href="/fees/student/{{ student.id }}" class="btn btn-ghost btn-sm">Details</a></div>
+    <div class="card-body" style="padding:0;">
+      <table>
+        <thead><tr><th>Fee</th><th>Amount</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for f in fees %}
+          <tr>
+            <td>{{ f.label }}</td>
+            <td>₹{{ "{:,.0f}".format(f.amount) }}</td>
+            <td><span class="badge {% if f.status=='paid' %}badge-green{% elif f.status=='partial' %}badge-yellow{% else %}badge-red{% endif %}">{{ f.status|title }}</span></td>
+          </tr>
+          {% else %}<tr><td colspan="3" style="text-align:center;color:var(--muted);">No fee records</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Parents -->
+{% if role in ('admin','hod') %}
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Parent Accounts ({{ parents|length }})</span>
+    <button class="btn btn-primary btn-sm" onclick="openModal('addParentModal')"><i class="fa fa-plus"></i> Add Parent</button>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <table>
+      <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for p in parents %}
+        <tr>
+          <td>{{ p.name }}</td>
+          <td>{{ p.email }}</td>
+          <td>{{ p.phone }}</td>
+          <td><button class="btn btn-danger btn-sm btn-icon" onclick="delParent({{ p.id }})"><i class="fa fa-trash"></i></button></td>
+        </tr>
+        {% else %}<tr><td colspan="4" style="text-align:center;color:var(--muted);">No parent accounts yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ADD PARENT MODAL -->
+<div class="modal-overlay" id="addParentModal">
+  <div class="modal">
+    <div class="modal-title">Add Parent Account <button class="modal-close" onclick="closeModal('addParentModal')">✕</button></div>
+    <div class="form-group"><label>Parent Name *</label><input id="p-name" placeholder="e.g. Rajesh Sharma"></div>
+    <div class="form-group"><label>Email *</label><input id="p-email" type="email" placeholder="parent@email.com"></div>
+    <div class="form-group"><label>Phone</label><input id="p-phone" placeholder="Mobile number"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+      <button class="btn btn-ghost" onclick="closeModal('addParentModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="addParent()"><i class="fa fa-plus"></i> Create Account</button>
+    </div>
+    <div id="parentResult" style="display:none;margin-top:12px;" class="alert alert-success"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+async function sendEmail(sid) {
+  const d = await apiPost(`/email/send/${sid}`, {});
+  toast(d.success ? '📧 Sent!' : '❌ ' + d.error, d.success ? 'success' : 'error');
+}
+async function addParent() {
+  const d = await apiPost('/students/{{ student.id }}/parents/add', {
+    name:  document.getElementById('p-name').value,
+    email: document.getElementById('p-email').value,
+    phone: document.getElementById('p-phone').value,
+  });
+  const res = document.getElementById('parentResult');
+  if (d.success) {
+    res.style.display='flex'; res.className='alert alert-success';
+    res.innerHTML = `✅ Parent account created. Username: <strong>${d.username}</strong> · Password: <strong>${d.password}</strong>`;
+    setTimeout(()=>location.reload(), 2000);
+  } else {
+    res.style.display='flex'; res.className='alert alert-error';
+    res.textContent = '❌ ' + (d.error || 'Failed');
+  }
+}
+async function delParent(pid) {
+  confirmDelete(`/students/{{ student.id }}/parents/delete/${pid}`, 'Remove this parent account?', () => location.reload());
+}
+</script>
+{% endblock %}

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Attendance — EduTrack Pro{% endblock %}
+{% block page_title %}Attendance{% endblock %}
+{% block page_sub %}{{ today }}{% endblock %}
+
+{% block topbar_actions %}
+{% if not no_assigned_subjects %}
+<button class="btn btn-success btn-sm" onclick="markAllPresent()"><i class="fa fa-check-double"></i> Mark All Present</button>
+<a href="/attendance/scan-qr-page" class="btn btn-ghost btn-sm"><i class="fa fa-qrcode"></i> Scan QR</a>
+{% endif %}
+<a href="/print/attendance?dept={{ dept_filter }}&sem={{ sem_filter }}&sec={{ sec_filter }}" target="_blank" class="btn btn-ghost btn-sm"><i class="fa fa-print"></i></a>
+{% endblock %}
+
+{% block content %}
+{% if no_assigned_subjects %}
+<div class="alert alert-warning"><i class="fa fa-circle-exclamation"></i>No subjects are assigned to this teacher account yet. Ask an admin or HOD to assign a subject.</div>
+{% endif %}
+<!-- Filters -->
+<div class="filters">
+  <select id="f-dept" onchange="applyFilters()">
+    <option value="">All Departments</option>
+    {% for d in depts %}<option value="{{ d.code }}" {% if dept_filter==d.code %}selected{% endif %}>{{ d.code }}</option>{% endfor %}
+  </select>
+  <select id="f-sem" onchange="applyFilters()">
+    <option value="">All Semesters</option>
+    {% for s in range(1,9) %}<option value="{{ s }}" {% if sem_filter==s|string %}selected{% endif %}>Sem {{ s }}</option>{% endfor %}
+  </select>
+  <select id="f-sec" onchange="applyFilters()">
+    <option value="">All Sections</option>
+    {% for sec in ['A','B','C','D'] %}<option value="{{ sec }}" {% if sec_filter==sec %}selected{% endif %}>Section {{ sec }}</option>{% endfor %}
+  </select>
+  <select id="f-subject" onchange="applyFilters()">
+    {% if role != 'teacher' %}
+    <option value="">Overall (Day)</option>
+    {% endif %}
+    {% for sub in subjects %}<option value="{{ sub.id }}" {% if subject_id==sub.id|string %}selected{% endif %}>{{ sub.code }} — {{ sub.name }}</option>{% endfor %}
+  </select>
+  <select id="f-period">
+    {% for p in range(1,9) %}<option value="{{ p }}">Period {{ p }}</option>{% endfor %}
+  </select>
+  <input type="date" id="f-date" value="{{ today_iso }}" style="width:auto;">
+  <button class="btn btn-ghost btn-sm" onclick="applyFilters()"><i class="fa fa-rotate"></i></button>
+</div>
+
+<!-- Summary badges -->
+<div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+  <span class="badge badge-blue" id="badge-total">Total: {{ today_data|length }}</span>
+  <span class="badge badge-green" id="badge-present">Present: {{ today_data|selectattr('status','eq','Present')|list|length }}</span>
+  <span class="badge badge-red" id="badge-absent">Absent: {{ today_data|selectattr('status','ne','Present')|list|length }}</span>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Today's Attendance</span>
+    <input type="text" placeholder="Search student…" id="searchBox" oninput="filterTable()" style="width:200px;padding:6px 10px;font-size:12px;">
+  </div>
+  <div class="table-wrap">
+    <table id="attTable">
+      <thead>
+        <tr><th>#</th><th>Name</th><th>USN</th><th>Dept</th><th>Sem</th><th>Sec</th><th>Status</th><th>Subject</th><th>Period</th><th>Time</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="attBody">
+        {% for s in today_data %}
+        <tr data-sid="{{ s.id }}" data-name="{{ s.name|lower }}">
+          <td style="color:var(--muted);">{{ loop.index }}</td>
+
+          <td><strong>{{ s.name }}</strong></td>
+          <td class="mono" style="font-size:12px;">{{ s.usn }}</td>
+          <td>{{ s.department }}</td>
+          <td>Sem {{ s.semester }}</td>
+          <td>{{ s.section }}</td>
+          <td id="status-{{ s.id }}">
+            <span class="badge {% if s.status=='Present' %}badge-green{% else %}badge-red{% endif %}">{{ s.status }}</span>
+          </td>
+          <td style="font-size:12px;color:var(--muted);">{{ s.subject_name }}</td>
+          <td style="font-size:12px;color:var(--muted);">P{{ s.period_no }}</td>
+          <td style="font-size:12px;color:var(--muted);" id="time-{{ s.id }}">{{ s.time or '—' }}</td>
+          <td>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-success btn-sm btn-icon" title="Present" onclick="markOne({{ s.id }},'Present')"><i class="fa fa-check"></i></button>
+              <button class="btn btn-danger  btn-sm btn-icon" title="Absent"  onclick="markOne({{ s.id }},'Absent')"><i class="fa fa-xmark"></i></button>
+              <button class="btn btn-warning btn-sm btn-icon" title="Late"    onclick="markOne({{ s.id }},'Late')"><i class="fa fa-clock"></i></button>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11" class="empty-state"><i class="fa fa-clipboard"></i><p>No students found for this filter</p></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyFilters() {
+  const dept    = document.getElementById('f-dept').value;
+  const sem     = document.getElementById('f-sem').value;
+  const sec     = document.getElementById('f-sec').value;
+  const subject = document.getElementById('f-subject').value;
+  let url = `/attendance?dept=${dept}&sem=${sem}&sec=${sec}&subject_id=${subject}`;
+  window.location = url;
+}
+
+function filterTable() {
+  const q = document.getElementById('searchBox').value.toLowerCase();
+  document.querySelectorAll('#attBody tr[data-name]').forEach(r => {
+    r.style.display = r.dataset.name.includes(q) ? '' : 'none';
+  });
+}
+
+async function markOne(sid, status) {
+  const subjectId = document.getElementById('f-subject').value;
+  const period    = document.getElementById('f-period').value;
+  const dateVal   = document.getElementById('f-date').value;
+  const d = await apiPost('/attendance/mark', {student_id: sid, status, subject_id: subjectId || null,
+                                                period_no: parseInt(period), date: dateVal || null});
+  if (d.success) {
+    const cell = document.getElementById('status-'+sid);
+    cell.innerHTML = `<span class="badge ${status==='Present'?'badge-green':status==='Late'?'badge-yellow':'badge-red'}">${status}</span>`;
+    const now = new Date().toTimeString().slice(0,8);
+    document.getElementById('time-'+sid).textContent = now;
+    toast(`${status} marked`, 'success');
+  }
+}
+
+async function markAllPresent() {
+  const dept    = document.getElementById('f-dept').value;
+  const sem     = document.getElementById('f-sem').value;
+  const sec     = document.getElementById('f-sec').value;
+  const subject = document.getElementById('f-subject').value;
+  const period  = document.getElementById('f-period').value;
+  const d = await apiPost('/attendance/mark-all', {dept, sem, sec, subject_id: subject || null, period_no: parseInt(period)});
+  if (d.success) { toast(`Marked ${d.count} students present`, 'success'); setTimeout(()=>location.reload(),800); }
+}
+</script>
+{% endblock %}

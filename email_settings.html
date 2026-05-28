@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Email Setup — EduTrack Pro{% endblock %}
+{% block page_title %}Email Setup{% endblock %}
+{% block page_sub %}Configure SMTP for credentials and announcements{% endblock %}
+
+{% block content %}
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><span class="card-title">SMTP Configuration</span></div>
+    <div class="card-body">
+      <div class="form-group"><label>Provider Preset</label>
+        <select onchange="applyPreset(this.value)">
+          <option value="">— Select preset —</option>
+          <option value="gmail">Gmail</option>
+          <option value="outlook">Outlook / Hotmail</option>
+          <option value="yahoo">Yahoo Mail</option>
+          <option value="zoho">Zoho Mail</option>
+        </select>
+      </div>
+      <div class="form-group"><label>SMTP Host</label><input id="smtp-host" value="{{ cfg.smtp_host }}"></div>
+      <div class="input-row">
+        <div class="form-group"><label>Port</label><input id="smtp-port" type="number" value="{{ cfg.smtp_port }}"></div>
+        <div class="form-group"><label>Sender Name</label><input id="smtp-sname" value="{{ cfg.sender_name }}"></div>
+      </div>
+      <div class="form-group"><label>Username / Email</label><input id="smtp-user" value="{{ cfg.smtp_user }}"></div>
+      <div class="form-group"><label>Password / App Password</label><input id="smtp-pass" type="password" value="{{ cfg.smtp_pass }}"></div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="smtp-enabled" style="width:auto;" {% if cfg.enabled %}checked{% endif %}> Enable email sending
+        </label>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-primary" onclick="saveEmail()"><i class="fa fa-floppy-disk"></i> Save</button>
+        <button class="btn btn-ghost"   onclick="testEmail()"><i class="fa fa-paper-plane"></i> Test Connection</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Recent Email Log</span></div>
+    <div class="card-body" style="padding:0;max-height:400px;overflow-y:auto;">
+      <table>
+        <thead><tr><th>Student</th><th>To</th><th>Status</th><th>Sent At</th></tr></thead>
+        <tbody>
+          {% for l in log %}
+          <tr>
+            <td>{{ l.name }}</td>
+            <td style="font-size:12px;">{{ l.to_email }}</td>
+            <td><span class="badge {% if l.status=='sent' %}badge-green{% else %}badge-red{% endif %}">{{ l.status }}</span></td>
+            <td style="font-size:11px;color:var(--muted);">{{ l.sent_at[:16] }}</td>
+          </tr>
+          {% else %}<tr><td colspan="4" style="text-align:center;color:var(--muted);">No emails sent yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PRESETS = {
+  gmail:   {host:'smtp.gmail.com',   port:587},
+  outlook: {host:'smtp.office365.com', port:587},
+  yahoo:   {host:'smtp.mail.yahoo.com', port:587},
+  zoho:    {host:'smtp.zoho.in', port:587},
+};
+function applyPreset(key) {
+  if (!PRESETS[key]) return;
+  document.getElementById('smtp-host').value = PRESETS[key].host;
+  document.getElementById('smtp-port').value = PRESETS[key].port;
+}
+async function saveEmail() {
+  const d = await apiPost('/settings/email/save', {
+    smtp_host:   document.getElementById('smtp-host').value,
+    smtp_port:   document.getElementById('smtp-port').value,
+    smtp_user:   document.getElementById('smtp-user').value,
+    smtp_pass:   document.getElementById('smtp-pass').value,
+    sender_name: document.getElementById('smtp-sname').value,
+    enabled:     document.getElementById('smtp-enabled').checked ? 1 : 0,
+  });
+  toast(d.success ? 'Saved!' : 'Failed', d.success ? 'success' : 'error');
+}
+async function testEmail() {
+  toast('Testing connection…','info');
+  const d = await apiPost('/settings/email/test', {
+    smtp_host: document.getElementById('smtp-host').value,
+    smtp_port: document.getElementById('smtp-port').value,
+    smtp_user: document.getElementById('smtp-user').value,
+    smtp_pass: document.getElementById('smtp-pass').value,
+    sender_name: document.getElementById('smtp-sname').value,
+  });
+  toast(d.message || (d.success ? 'Connected!' : 'Failed'), d.success ? 'success' : 'error');
+}
+</script>
+{% endblock %}

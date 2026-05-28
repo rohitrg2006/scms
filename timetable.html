@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Timetable — EduTrack Pro{% endblock %}
+{% block page_title %}Timetable{% endblock %}
+{% block page_sub %}{{ dept }} · Sem {{ sem }} · Section {{ sec }}{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" onclick="openModal('addTTModal')"><i class="fa fa-plus"></i> Add Period</button>
+{% endblock %}
+
+{% block content %}
+<div class="filters">
+  <select id="f-dept" onchange="applyFilters()">
+    {% for d in depts %}<option value="{{ d.code }}" {% if dept==d.code %}selected{% endif %}>{{ d.code }}</option>{% endfor %}
+  </select>
+  <select id="f-sem" onchange="applyFilters()">
+    {% for s in range(1,9) %}<option value="{{ s }}" {% if sem==s|string %}selected{% endif %}>Sem {{ s }}</option>{% endfor %}
+  </select>
+  <select id="f-sec" onchange="applyFilters()">
+    {% for sec in ['A','B','C','D'] %}<option value="{{ sec }}" {% if sec==sec %}selected{% endif %}>Section {{ sec }}</option>{% endfor %}
+  </select>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="min-width:70px;">Period</th>
+          {% for d in days %}<th style="min-width:130px;">{{ d }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in periods %}
+        <tr>
+          <td style="font-weight:700;color:var(--muted);">P{{ p }}</td>
+          {% for d in days %}
+          {% set entry = grid[d][p] %}
+          <td style="vertical-align:top;">
+            {% if entry %}
+            <div style="background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.2);border-radius:8px;
+                        padding:8px 10px;position:relative;">
+              <div style="font-size:12px;font-weight:700;color:var(--text);">{{ entry.subject }}</div>
+              <div style="font-size:11px;color:var(--muted);">{{ entry.faculty }}</div>
+              <div style="font-size:10px;color:var(--muted);">{{ entry.time_start }}–{{ entry.time_end }}</div>
+              <button onclick="delEntry({{ entry.id }})" style="position:absolute;top:4px;right:4px;
+                background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:2px;">✕</button>
+            </div>
+            {% else %}
+            <button class="btn btn-ghost btn-sm" style="width:100%;font-size:11px;opacity:.5;"
+                    onclick="setAddDefaults('{{ d }}', {{ p }})">+ Add</button>
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ADD MODAL -->
+<div class="modal-overlay" id="addTTModal">
+  <div class="modal">
+    <div class="modal-title">Add Timetable Entry <button class="modal-close" onclick="closeModal('addTTModal')">✕</button></div>
+    <div class="input-row">
+      <div class="form-group"><label>Day</label>
+        <select id="tt-day">{% for d in days %}<option>{{ d }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group"><label>Period</label>
+        <select id="tt-period">{% for p in periods %}<option>{{ p }}</option>{% endfor %}</select>
+      </div>
+    </div>
+    <div class="form-group"><label>Subject</label>
+      <select id="tt-subject-sel" onchange="fillSubjectName()">
+        <option value="">— Custom —</option>
+        {% for sub in subjects %}<option value="{{ sub.id }}" data-name="{{ sub.name }}" data-faculty="{{ sub.faculty }}">{{ sub.code }} — {{ sub.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="input-row">
+      <div class="form-group"><label>Subject Name</label><input id="tt-subject" placeholder="e.g. Data Structures"></div>
+      <div class="form-group"><label>Faculty</label><input id="tt-faculty" placeholder="e.g. Dr. Iyer"></div>
+    </div>
+    <div class="input-row">
+      <div class="form-group"><label>Start Time</label><input id="tt-start" type="time" value="09:00"></div>
+      <div class="form-group"><label>End Time</label><input id="tt-end" type="time" value="09:50"></div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+      <button class="btn btn-ghost" onclick="closeModal('addTTModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitTT()"><i class="fa fa-plus"></i> Add</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyFilters() {
+  const dept = document.getElementById('f-dept').value;
+  const sem  = document.getElementById('f-sem').value;
+  const sec  = document.getElementById('f-sec').value;
+  window.location = `/timetable?dept=${dept}&sem=${sem}&sec=${sec}`;
+}
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function setAddDefaults(day, period) {
+  document.getElementById('tt-day').value    = day;
+  document.getElementById('tt-period').value = period;
+  openModal('addTTModal');
+}
+function fillSubjectName() {
+  const sel = document.getElementById('tt-subject-sel');
+  const opt = sel.options[sel.selectedIndex];
+  if (opt.value) {
+    document.getElementById('tt-subject').value = opt.dataset.name;
+    document.getElementById('tt-faculty').value = opt.dataset.faculty;
+  }
+}
+async function submitTT() {
+  const subSel = document.getElementById('tt-subject-sel').value;
+  const d = await apiPost('/timetable/add', {
+    dept:       '{{ dept }}', sem: '{{ sem }}', sec: '{{ sec }}',
+    day:        document.getElementById('tt-day').value,
+    period:     document.getElementById('tt-period').value,
+    subject:    document.getElementById('tt-subject').value,
+    faculty:    document.getElementById('tt-faculty').value,
+    time_start: document.getElementById('tt-start').value,
+    time_end:   document.getElementById('tt-end').value,
+    subject_id: subSel || null,
+  });
+  if (d.success) { toast('Period added!','success'); setTimeout(()=>location.reload(),600); }
+  else toast('Failed','error');
+}
+async function delEntry(id) {
+  const d = await apiPost(`/timetable/delete/${id}`, {});
+  if (d.success) { toast('Removed','info'); setTimeout(()=>location.reload(),400); }
+}
+</script>
+{% endblock %}
